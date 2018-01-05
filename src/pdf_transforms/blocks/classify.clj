@@ -1,5 +1,5 @@
 (ns pdf-transforms.blocks.classify
-  "Functions that use hand-written hueristics to classify blocks according to their associated features."
+  "Functions that use hand-written heuristics to classify blocks according to their associated features."
   (:require [pdf-transforms.utilities :as utils]
             [clojure.string :as s]
             [pdf-transforms.common :as cmn]))
