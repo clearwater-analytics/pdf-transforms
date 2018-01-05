@@ -106,8 +106,7 @@ Accordingly, all blocks are transformed into a set of components, which all are 
 
 ## Limitations
 Pdf-transforms was built with the primary purpose of parsing a particular type of table structure (see resources/sample_1.pdf).  We have found it 
-to be more accurate than other pdf parsing libraries (commercial or open source) on such tables but less useful when dealing with significantly different table layouts. 
-We hope that to 
+to be more accurate than other pdf parsing libraries (commercial or open source) on such tables but less useful when dealing with significantly different table layouts.
 
 ## License
 

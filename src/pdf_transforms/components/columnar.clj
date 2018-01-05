@@ -18,7 +18,7 @@
        (sets/difference (into #{} (range l-bound (inc r-bound))))))
 
 (defn white-minus-columns
-  "All possible pixels (0 -> 1000) minus the pixels that compose each of the columnsespace pixels on a page"
+  "All possible pixels (0 -> 1000) minus those occupied by text on a page"
   [columns]
   (->> columns
        (map #(into #{} (range (:x0 %) (inc (:x1 %)))))
