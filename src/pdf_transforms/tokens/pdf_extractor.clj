@@ -46,15 +46,19 @@
             (proxy-super processTextPosition text)))
       (getData ([] @position-data)))))
 
+(defn standardize [bounds top-y ay by cy]
+  (assoc bounds :y0 (- top-y (max ay by cy))
+                :y1 (- top-y (min ay by cy))))
+
 (defn in-memory-line-stripper [^PDPage page]
-  (let [line-cutoff 20
+  (let [line-cutoff 10
         position-data (atom [])
         current-position (atom [0 0])
         top-y (-> page .getCropBox .getUpperRightY)]
     (proxy [PDFGraphicsStreamEngine TextStripperData] [page]
       (appendRectangle [p0 p1 p2 p3]
         (when (> (Point2D/distance (.getX p0) (.getY p0) (.getX p2) (.getY p2)) line-cutoff)
-          (swap! position-data #(conj % {:x0 (.getX p0) :y0 (- top-y (.getY p2)) :x1 (.getX p2) :y1 (- top-y (.getY p0))}))))
+          (swap! position-data #(conj % (standardize {:x0 (.getX p0) :x1 (.getX p2)} top-y (.getY p0) (.getY p1) (.getY p2))))))
       (clip [winding-rule])
       (closePath [])
       (curveTo [x1 y1 x2 y2 x3 y3])

@@ -5,4 +5,10 @@
   [[org.clojure/clojure "1.9.0"]
    [org.apache.pdfbox/pdfbox "2.0.3"]
    [org.bouncycastle/bcmail-jdk15 "1.46"]
-   [org.bouncycastle/bcprov-jdk15 "1.46"]])
+   [org.bouncycastle/bcprov-jdk15 "1.46"]
+   [prismatic/plumbing "0.5.5"]
+   [environ "1.1.0"]]
+
+  :plugins [[lein-environ "1.1.0"]]
+
+  )
