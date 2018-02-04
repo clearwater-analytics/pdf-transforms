@@ -35,24 +35,16 @@
                                                          (some-> fdesc (.getFontWeight) (>= 700))
                                                          (re-find bold (or font-name "")))
                                                    {:bold? true})
-                                            {:text        (char-norm/replace-unicode-chars (.getUnicode text))
-                                             :x           (.getXDirAdj text)
-                                             :y           (some-> (.getYDirAdj text) (* 100) float Math/round (/ 100.0))
-                                             :page-number (proxy-super getCurrentPageNo) ;expensive, could get 35 % speed increase by doing this some other way ...
-                                             :f-size      (.getFontSizeInPt text)
-                                             :height      (.getHeight text)
-                                             :width       (.getWidthDirAdj text)
-                                             :font        font-name}))))
+                                                 {:text        (char-norm/replace-unicode-chars (.getUnicode text))
+                                                  :x           (.getXDirAdj text)
+                                                  :y           (some-> (.getYDirAdj text) (* 100) float Math/round (/ 100.0))
+                                                  :page-number (proxy-super getCurrentPageNo) ;expensive, could get 35 % speed increase by doing this some other way ...
+                                                  :f-size      (.getFontSizeInPt text)
+                                                  :height      (.getHeight text)
+                                                  :width       (.getWidthDirAdj text)
+                                                  :font        font-name}))))
             (proxy-super processTextPosition text)))
       (getData ([] @position-data)))))
-
-
-;break a rectangle into 4 boundary lines
-(defn rectangle->bounds [{:keys [x0 x1 y0 y1] :as rect}]
-  [(assoc rect :y0 y1)
-   (assoc rect :y1 y0)
-   (assoc rect :x0 x1)
-   (assoc rect :x1 x0)])
 
 (defn in-memory-line-stripper [^PDPage page]
   (let [line-cutoff 20
@@ -62,7 +54,14 @@
     (proxy [PDFGraphicsStreamEngine TextStripperData] [page]
       (appendRectangle [p0 p1 p2 p3]
         (when (> (Point2D/distance (.getX p0) (.getY p0) (.getX p2) (.getY p2)) line-cutoff)
-          (swap! position-data #(apply conj % (rectangle->bounds {:x0 (.getX p0) :y0 (- top-y (.getY p0)) :x1 (.getX p2) :y1 (- top-y (.getY p2))})))))
+          (swap! position-data #(conj % {:x0 (.getX p0) :y0 (- top-y (.getY p2)) :x1 (.getX p2) :y1 (- top-y (.getY p0))}))))
+      (clip [winding-rule])
+      (closePath [])
+      (curveTo [x1 y1 x2 y2 x3 y3])
+      (drawImage [image])
+      (endPath [])
+      (fillAndStrokePath [winding-rule])
+      (fillPath [winding-rule])
       (getCurrentPoint []
         (Point2D$Double. (first @current-position) (second @current-position)))
       (lineTo [x y]
@@ -71,15 +70,16 @@
         (reset! current-position [x y]))
       (moveTo [x y]
         (reset! current-position [x y]))
+      (strokePath [])
       (getData ([] @position-data)))))
 
 ;; Private Functions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn preprocess-pdf [doc]
   (do
-    (.setAllSecurityToBeRemoved doc true)  ;decrypt the document
+    (.setAllSecurityToBeRemoved doc true)                   ;decrypt the document
     (let [acro-form (-> doc .getDocumentCatalog .getAcroForm)]
-      (if (not (nil? acro-form)) (.flatten acro-form)))  ;convert editable fields into values
+      (if (not (nil? acro-form)) (.flatten acro-form)))     ;convert editable fields into values
     doc))
 
 (defn- build-position-data [pdf-doc & [[start-page end-page]]]
@@ -90,27 +90,27 @@
     (.getData stripper)))
 
 (defn- build-line-position-data [pdf-doc & [[start-page end-page]]]
-  (doall (map
-           (fn [page-no] (let [page (.getPage pdf-doc page-no)
-                               stripper (in-memory-line-stripper page)]
-                           (.processPage stripper page)
-                           (map #(assoc % :page-number (inc page-no)) (.getData stripper))))
-           (range (or start-page 0) (or end-page (.getNumberOfPages pdf-doc))))))
+  (->> (range (or start-page 0) (or end-page (.getNumberOfPages pdf-doc)))
+       (map (fn [page-no] (let [page (.getPage pdf-doc page-no)
+                                stripper (in-memory-line-stripper page)]
+                            (.processPage stripper page)
+                            (map #(assoc % :page-number (inc page-no)) (.getData stripper)))))
+       flatten))
 
 (defn bookmark->map [^PDOutlineItem bookmark]
   (assoc
     (if (instance? PDActionGoTo (.getAction bookmark))
       (if-let [dest (-> bookmark .getAction .getDestination)]
-        { :page-number (inc (.retrievePageNumber dest))
-         :y            (try (max (- (-> dest .getPage .getMediaBox .getHeight)
-                         (.getTop dest))
-                      0)
-                 (catch Exception _ 0))}))
+        {:page-number (inc (.retrievePageNumber dest))
+         :y           (try (max (- (-> dest .getPage .getMediaBox .getHeight)
+                                   (.getTop dest))
+                                0)
+                           (catch Exception _ 0))}))
     :name (.getTitle bookmark)))
 
 (defn node-recur
   ([node] (node-recur node false))
-  ([node root?] {:node (if root? "root" (bookmark->map node))
+  ([node root?] {:node     (if root? "root" (bookmark->map node))
                  :children (mapv node-recur (.children node))}))
 
 (defn get-bookmarks [pdf-doc & _]

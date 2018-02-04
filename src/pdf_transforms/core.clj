@@ -72,3 +72,9 @@
   (->> (transform pdf-url {:page-bounds page-bounds :format :blocks})
        (ann/annotate-simple pdf-url output-directory)
        dorun))
+
+(defn annotate-graphics [^String pdf-url & [{:keys [output-directory page-bounds]}]]
+  (->> pdf-url
+       pe/extract-line-positions
+       (ann/annotate-simple pdf-url output-directory)
+       dorun))
