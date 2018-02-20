@@ -1,5 +1,5 @@
 # pdf-transforms
-Pdf-transforms is a Clojure library for transforming PDF documents into a data structures that are more amenable to machine processing. 
+Pdf-transforms is a Clojure library for transforming PDF documents into data structures that are more amenable to machine processing.
 It accomplishes this through the use of exceedingly clever (just don't consult the source code on this one) heuristics to detect and leverage 
 important visual features of a document (e.g. whitespace columns & font changes) in order to detect and parse components such as tables and paragraphs.
 
