@@ -109,12 +109,6 @@
 
 (comment
 
-  (label-data "bond_lines.pdf" "file:/home/ARBFUND/tlong/Documents/pdf_parsing/neo_pdfs/bond_lines.pdf")
-  #_(let [pdf "file:/home/ARBFUND/tlong/Documents/pdf_parsing/neo_pdfs/bond_lines.pdf"]
-    (->> (core/transform pdf {:page-bounds [0 10] :format :components})
-         components->labelz
-         (a/annotate {:pdf-url pdf :output-directory annotated-dir :drawn-ids? true})))
-
 
   (->> dir
        get-pdfs-in-dir
@@ -162,13 +156,6 @@
        get-pdfs-in-dir
        (map #(core/annotate-blocks % {:output-directory (str annotated-dir "blocks/")}))
        dorun)
-
-
-  ;open the pdf (actual use case is opening the annotated pdf, not the original)
-  (sh "xdg-open" "file:/home/ARBFUND/tlong/Documents/pdf_parsing/neo_pdfs/bond_lines.pdf")
-
-  ;open sublime with the manual corrections
-  ;(sh "subl" "file:/home/ARBFUND/tlong/Documents/manual_corrections.txt")
 
 
   )
