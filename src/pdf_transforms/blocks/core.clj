@@ -10,10 +10,12 @@
 (defn font-clean [font]
   (s/replace font font-noise ""))
 
-(defn font-switch? [block {:keys [font f-size]}]
-  (let [{font2 :font f-size2 :f-size} (peek block)]
-    (or (not= (font-clean font) (font-clean font2))
-        (not= f-size f-size2))))
+(defn new-font? [{font2 :font f-size2 :f-size} {:keys [font f-size]}]
+  (or (not= (font-clean font) (font-clean font2))
+      (not= f-size f-size2)))
+
+(defn font-switch? [block token]
+  (new-font? token (peek block)))
 
 (defn font-switch-newline? [block {y1 :y :as word}]
   (let [{y0 :y height :height ss? :superscript?} (peek block)]

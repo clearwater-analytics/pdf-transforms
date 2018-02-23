@@ -1,4 +1,4 @@
-(defproject pdf-transforms "0.1.0"
+(defproject pdf-transforms "0.1.1-SNAPSHOT"
   :description "A collections of functions for transforming pdf documents"
   :url "https://github.com/clearwater-analytics/pdf-transforms"
   :dependencies
@@ -9,6 +9,4 @@
    [prismatic/plumbing "0.5.5"]
    [environ "1.1.0"]]
 
-  :plugins [[lein-environ "1.1.0"]]
-
-  )
+  :plugins [[lein-environ "1.1.0"]])

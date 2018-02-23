@@ -16,11 +16,11 @@
     (< (Math/abs (- y y0)) 2)
     (neg? (- x x0))))
 
-(defn same-word? [{x0 :x w0 :width y0 :y f-size0 :f-size}
+(defn same-word? [{x0 :x w0 :width y0 :y f-size0 :f-size cg :char-gap}
                   {:keys [x y f-size]}]
   (and
-    (= f-size0 f-size)
-    (< (Math/abs (- x (+ x0 w0))) 1.5)
+    ;(= f-size0 f-size)
+    (<= (dec (Math/abs (- x (+ w0 x0)))) (or cg 0))
     (< (Math/abs (- y0 y)) 4)))
 
 ;is the superscript on the right of the modified term
@@ -60,7 +60,7 @@
        (apply concat)
        (drop-while #(re-matches whitespace (:text %)))
        ((fn [chars] (reduce (fn [words {:keys [x width text] :as char}]
-                              (let [{wx :x wt :text :as word} (peek words)]
+                              (let [{wx :x wt :text cg :char-gap wwidth :width :as word} (peek words)]
                                 (cond
                                   (or (duplicate-char? word char)
                                       (re-matches whitespace text)) words
@@ -71,6 +71,8 @@
                                   (super-script? word char) (conj words char)
                                   (same-word? word char) (conj (pop words)
                                                                (assoc word :width (- (+ x width) wx)
+                                                                           :char-gap (/ (+ (or cg 0) (Math/abs (- x (+ wx wwidth))))
+                                                                                        (if (<= (count (:text word)) 2) 1 2))
                                                                            :text (str wt text)))
                                   :else (conj words char))))
                             [(first chars)]

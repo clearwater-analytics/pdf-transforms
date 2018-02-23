@@ -12,12 +12,6 @@
             [pdf-transforms.blocks.classify :as cls])
   (:import (org.apache.pdfbox.text PDFTextStripper)))
 
-(defn- pdf->pages-of-lines [pdf-path & [page-bounds]]
-  (->> page-bounds
-       (pe/extract-char-positions pdf-path)
-       pd/->pages-of-words
-       (map utils/create-lines)))
-
 (def pdf->text
   (partial pe/process-pdf-document
            (fn [pdf-doc & [[start-page end-page]]]
@@ -26,18 +20,28 @@
                                     end-page (doto (.setEndPage end-page)))]
                (.getText stripper pdf-doc)))))
 
+(defn pages-of-words [pdf-path & [page-bounds]]
+  (->> page-bounds
+       (pe/extract-char-positions pdf-path)
+       pd/->pages-of-words))
 
 
-(defn- block-transforms [pdf-path {:keys [page-bounds compose-components?]}]
-  (->> (pe/extract-char-positions pdf-path page-bounds)
-       pd/->pages-of-words
-       (mapcat (fn [page]
-                 (cond->> (blks/blocks-on-page page)
-                          true f/enfeature-blocks
-                          true (map cls/add-class)
-                          compose-components? (cmps/->components page)
-                          compose-components? (map #(dissoc % :class))
-                          true cmn/sort-blocks)))))
+(defn- pdf->pages-of-lines [pdf-path & [page-bounds]]
+  (map utils/create-lines (pages-of-words pdf-path page-bounds)))
+
+
+(defn page->compositions [page {:keys [compose-components?]}]
+  (cond->> (blks/blocks-on-page page)
+           true f/enfeature-blocks
+           true (map cls/add-class)
+           compose-components? (cmps/->components page)
+           compose-components? (map #(dissoc % :class))
+           true cmn/sort-blocks))
+
+
+(defn- block-transforms [pdf-path {:keys [page-bounds] :as opts}]
+  (->> (pages-of-words pdf-path page-bounds)
+       (mapcat #(page->compositions % opts))))
 
 
 (defn transform
@@ -51,6 +55,7 @@
     :pages-of-lines (pdf->pages-of-lines pdf-path page-bounds)
     (block-transforms pdf-path (assoc opts :compose-components? true))))
 
+
 (defn annotate-components
   "Creates a modified copy of a pdf (specified as a url string) with
    colored boxes superimposed on it to delimit components.  A box's
@@ -59,8 +64,10 @@
    [(first page-bounds) , (last page-bounds)) will be annotated."
   [^String pdf-url & [{:keys [output-directory page-bounds]}]]
   (->> (transform pdf-url {:page-bounds page-bounds :format :components})
-       (ann/annotate-components pdf-url output-directory)
+       (ann/annotate {:pdf-url pdf-url :output-directory output-directory
+                      :table-columns? true :superscripts? true})
        dorun))
+
 
 (defn annotate-blocks
   "Creates a modified copy of a pdf (specified as a url string) with
@@ -70,11 +77,12 @@
    [(first page-bounds) , (last page-bounds)) will be annotated."
   [^String pdf-url & [{:keys [output-directory page-bounds]}]]
   (->> (transform pdf-url {:page-bounds page-bounds :format :blocks})
-       (ann/annotate-simple pdf-url output-directory)
+       (ann/annotate {:pdf-url pdf-url :output-directory output-directory})
        dorun))
 
-(defn annotate-graphics [^String pdf-url & [{:keys [output-directory page-bounds]}]]
+
+(defn annotate-graphics [^String pdf-url & [{:keys [output-directory]}]]
   (->> pdf-url
        pe/extract-line-positions
-       (ann/annotate-simple pdf-url output-directory)
+       (ann/annotate {:pdf-url pdf-url :output-directory output-directory})
        dorun))

@@ -121,6 +121,12 @@
   (if-let [outline (-> pdf-doc .getDocumentCatalog .getDocumentOutline)]
     (:children (node-recur outline true))))
 
+(defn- shorten-doc [istream [start-page end-page] output-file]
+  (with-open [doc (-> istream io/input-stream RandomAccessBufferedFileInputStream. PDFParser. (doto (.parse)) .getPDDocument preprocess-pdf)]
+    (dorun (for [p (concat (repeat (- (.getNumberOfPages doc) (inc end-page)) (inc end-page)) (range 0 start-page))]
+             (.removePage doc p)))
+    (.save doc output-file)))
+
 ;; PUBLIC Functions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn process-pdf-document [process-fn is & pages]
