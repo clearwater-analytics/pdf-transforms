@@ -138,8 +138,8 @@
                          :y0 y0
                          :y1 (+ y0 (- (.getUpperRightY ann) (.getLowerLeftY ann)))}))
           pojo->edn (fn [^PDAnnotation ann top-y]
-                      (when (= PDAnnotationTextMarkup (class ann))
-                          (assoc (rect->edn (.getRectangle ann) top-y) :color (-> ann .getColor .getComponents vec))))]
+                      (when (instance? PDAnnotation ann)
+                        (assoc (rect->edn (.getRectangle ann) top-y) :color (-> ann .getColor .getComponents vec))))]
       (->> (for [page-no (range 0 (.getNumberOfPages doc))]
              (let [^PDPage page (.getPage doc page-no)
                    top-y (-> page .getCropBox .getUpperRightY)]
