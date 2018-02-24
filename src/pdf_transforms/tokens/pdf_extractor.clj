@@ -11,7 +11,9 @@
            (org.apache.pdfbox.io RandomAccessBufferedFileInputStream)
            (org.apache.pdfbox.pdfparser PDFParser)
            (org.apache.pdfbox.pdmodel PDDocument PDPage)
-           (org.apache.pdfbox.pdmodel.font PDFont PDFontDescriptor)))
+           (org.apache.pdfbox.pdmodel.font PDFont PDFontDescriptor)
+           (org.apache.pdfbox.pdmodel.interactive.annotation PDAnnotation PDAnnotationTextMarkup)
+           (org.apache.pdfbox.pdmodel.common PDRectangle)))
 
 
 (definterface TextStripperData
@@ -126,6 +128,24 @@
     (dorun (for [p (concat (repeat (- (.getNumberOfPages doc) (inc end-page)) (inc end-page)) (range 0 start-page))]
              (.removePage doc p)))
     (.save doc output-file)))
+
+(defn get-annotations [istream]
+  (with-open [doc (-> istream io/input-stream RandomAccessBufferedFileInputStream. PDFParser. (doto (.parse)) .getPDDocument preprocess-pdf)]
+    (let [rect->edn (fn [^PDRectangle ann top-y]
+                      (let [y0 (- top-y (.getUpperRightY ann))]
+                        {:x0 (Math/floor (.getLowerLeftX ann))
+                         :x1 (Math/ceil (.getUpperRightX ann))
+                         :y0 y0
+                         :y1 (+ y0 (- (.getUpperRightY ann) (.getLowerLeftY ann)))}))
+          pojo->edn (fn [^PDAnnotation ann top-y]
+                      (when (= PDAnnotationTextMarkup (class ann))
+                          (assoc (rect->edn (.getRectangle ann) top-y) :color (-> ann .getColor .getComponents vec))))]
+      (->> (for [page-no (range 0 (.getNumberOfPages doc))]
+             (let [^PDPage page (.getPage doc page-no)
+                   top-y (-> page .getCropBox .getUpperRightY)]
+               (keep #(assoc (pojo->edn % top-y) :page-number (inc page-no)) (.getAnnotations page))))
+           flatten
+           (filter :x0)))))
 
 ;; PUBLIC Functions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

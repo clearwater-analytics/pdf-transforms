@@ -12,7 +12,7 @@
        (map (comp str #(.toURL %)))
        (filter #(clojure.string/ends-with? % ".pdf"))))
 
-(def dir (str home-dir "/Documents/pdf_parsing/control_2"))
+(def dir (str home-dir "/Documents/pdf_parsing/control_2/"))
 (def annotated-dir (str home-dir "/Temp/"))
 
 (defn token->bounds [{:keys [x width y height page-number id]}]
