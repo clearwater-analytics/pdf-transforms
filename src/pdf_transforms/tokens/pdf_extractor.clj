@@ -10,9 +10,9 @@
            (java.awt.geom Point2D Point2D$Double)
            (org.apache.pdfbox.io RandomAccessBufferedFileInputStream)
            (org.apache.pdfbox.pdfparser PDFParser)
-           (org.apache.pdfbox.pdmodel PDDocument PDPage)
+           (org.apache.pdfbox.pdmodel PDPage)
            (org.apache.pdfbox.pdmodel.font PDFont PDFontDescriptor)
-           (org.apache.pdfbox.pdmodel.interactive.annotation PDAnnotation PDAnnotationTextMarkup)
+           (org.apache.pdfbox.pdmodel.interactive.annotation PDAnnotation)
            (org.apache.pdfbox.pdmodel.common PDRectangle)))
 
 
@@ -129,23 +129,19 @@
              (.removePage doc p)))
     (.save doc output-file)))
 
-(defn get-annotations [istream]
-  (with-open [doc (-> istream io/input-stream RandomAccessBufferedFileInputStream. PDFParser. (doto (.parse)) .getPDDocument preprocess-pdf)]
-    (let [rect->edn (fn [^PDRectangle ann top-y]
-                      (let [y0 (- top-y (.getUpperRightY ann))]
-                        {:x0 (Math/floor (.getLowerLeftX ann))
-                         :x1 (Math/ceil (.getUpperRightX ann))
-                         :y0 y0
-                         :y1 (+ y0 (- (.getUpperRightY ann) (.getLowerLeftY ann)))}))
-          pojo->edn (fn [^PDAnnotation ann top-y]
-                      (when (instance? PDAnnotation ann)
-                        (assoc (rect->edn (.getRectangle ann) top-y) :color (-> ann .getColor .getComponents vec))))]
-      (->> (for [page-no (range 0 (.getNumberOfPages doc))]
-             (let [^PDPage page (.getPage doc page-no)
-                   top-y (-> page .getCropBox .getUpperRightY)]
-               (keep #(assoc (pojo->edn % top-y) :page-number (inc page-no)) (.getAnnotations page))))
-           flatten
-           (filter :x0)))))
+(defn- get-annotations [doc & _]
+  (let [rect->edn (fn [^PDRectangle ann top-y]
+                    (let [y0 (- top-y (.getUpperRightY ann))]
+                      {:x0 (Math/floor (.getLowerLeftX ann))
+                       :x1 (Math/ceil (.getUpperRightX ann))
+                       :y0 y0
+                       :y1 (+ y0 (- (.getUpperRightY ann) (.getLowerLeftY ann)))}))
+        pojo->edn (fn [^PDAnnotation ann top-y]
+                    (assoc (rect->edn (.getRectangle ann) top-y) :color (some-> ann .getColor .getComponents vec)))]
+    (flatten (for [page-no (range 0 (.getNumberOfPages doc))]
+               (let [^PDPage page (.getPage doc page-no)
+                     top-y (-> page .getCropBox .getUpperRightY)]
+                 (keep #(assoc (pojo->edn % top-y) :page-number (inc page-no)) (.getAnnotations page)))))))
 
 ;; PUBLIC Functions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -156,3 +152,4 @@
 (def extract-char-positions (partial process-pdf-document build-position-data))
 (def extract-line-positions (partial process-pdf-document build-line-position-data))
 (def extract-bookmarks (partial process-pdf-document get-bookmarks))
+(def extract-annotations (partial process-pdf-document get-annotations))

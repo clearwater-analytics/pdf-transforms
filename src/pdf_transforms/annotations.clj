@@ -5,31 +5,42 @@
   (:require [clojure.string :as s]
             [pdf-transforms.utilities :as utils]
             [pdf-transforms.tokens.pdf-extractor :as ext])
-  (:import [org.apache.pdfbox.pdmodel PDDocument PDPageContentStream]
-           [java.awt Color]
+  (:import [org.apache.pdfbox.pdmodel PDDocument]
            (java.net URL)
            (java.io File)
-           (org.apache.pdfbox.pdmodel.font PDType1Font)))
+           (org.apache.pdfbox.pdmodel.common PDRectangle)
+           (org.apache.pdfbox.pdmodel.interactive.annotation PDAnnotationSquareCircle PDBorderStyleDictionary)
+           (org.apache.pdfbox.pdmodel.graphics.color PDColor PDDeviceRGB)))
 
-(def block-colors {:table-cell Color/PINK
-                   :table-column Color/MAGENTA
-                   :table Color/MAGENTA
-                   :column-n-header Color/MAGENTA
-                   :key Color/YELLOW
-                   :key-column Color/YELLOW
-                   :label Color/RED
-                   :labeled Color/CYAN
-                   :page-footer Color/GREEN
-                   :table-footer Color/GREEN
-                   :paragraph Color/BLUE})
+(def COLORS {:red (float-array [1.0 0.0 0.0])
+             :magenta (float-array [1.0 0.0 1.0])
+             :pink  (float-array [1.0 0.7 0.7])
+             :green (float-array [0.0 1.0 0.0])
+             :cyan  (float-array [0.0 1.0 1.0])
+             :blue (float-array [0.0 0.0 1.0])
+             :yellow (float-array [1.0 1.0 0.0])})
 
-(def component-colors {:table  Color/MAGENTA
-                       :table-column Color/MAGENTA
-                       :keywords  Color/RED
-                       :superscript Color/CYAN
-                       :text   Color/BLUE})
+(defn pd-color [color-name] (new PDColor (COLORS color-name) PDDeviceRGB/INSTANCE))
 
-(def CLEAR-COLOR (new Color 1.0 1.0 1.0 0.0))
+(def block-colors {:table-cell (pd-color :pink)
+                   :table-column (pd-color :magenta)
+                   :table (pd-color :magenta)
+                   :column-n-header (pd-color :magenta)
+                   :key (pd-color :yellow)
+                   :key-column (pd-color :yellow)
+                   :label (pd-color :red)
+                   :labeled (pd-color :cyan)
+                   :page-footer (pd-color :green)
+                   :table-footer (pd-color :green)
+                   :paragraph (pd-color :blue)})
+
+(def component-colors {:table  (pd-color :magenta)
+                       :table-column (pd-color :magenta)
+                       :keywords  (pd-color :red)
+                       :superscript (pd-color :cyan)
+                       :text   (pd-color :blue)})
+
+(def THICK-BORDER (doto (new PDBorderStyleDictionary) (.setWidth (float 1.0))))
 
 (defn obj->color [type class]
   (or (component-colors type) (block-colors class)))
@@ -40,37 +51,30 @@
                    (str "annotated-" (rand-int 9999) ".pdf"))]
     (if out-dir (File. (File. out-dir) filename) (File. filename))))
 
-(defn- draw-rect [stream {:keys [x y width height]}]
-  (.addRect stream x y width height)
-  (.stroke stream))
+(defn box->annotation [{:keys [x0 x1 y0 y1 ^PDColor color]}]
+  (let [position (doto (PDRectangle.)
+                   (.setLowerLeftX x0) (.setLowerLeftY y0)
+                   (.setUpperRightX x1) (.setUpperRightY y1))]
+    (doto
+      (PDAnnotationSquareCircle. PDAnnotationSquareCircle/SUB_TYPE_SQUARE)
+      (.setColor (or color (pd-color :red)))
+      (.setBorderStyle THICK-BORDER)
+      (.setRectangle position))))
 
-(defn- draw-string [stream {:keys [x y id]}]
-  (doto stream
-    (.setNonStrokingColor CLEAR-COLOR)
-    (.beginText)
-    (.setFont (PDType1Font/TIMES_ROMAN) 8.0)
-    (.moveTextPositionByAmount x y)
-    (.drawString id)
-    (.endText)))
-
-(defn- annotate-page [{:keys [^PDDocument document ^Long page-num boxes drawn-ids?]}]
+(defn- add-page-annotations [{:keys [^PDDocument document ^Long page-num boxes]}]
   (let [page (.getPage document page-num)
-        top-y (-> page .getCropBox .getUpperRightY)]
-    (with-open [stream (PDPageContentStream. document page true true true)]
-      (.setLineWidth stream 0.7)
-      (dorun (for [{:keys [x0 x1 y0 y1 id ^Color color]} boxes]
-               (let [coords {:x      x0
-                             :y      (- top-y y1)
-                             :id id
-                             :width  (- x1 x0)
-                             :height (Math/abs (- y1 y0))}]
-                 (.setStrokingColor stream (or color Color/GRAY))
-                 (when (and drawn-ids? id) (draw-string stream coords))
-                 (draw-rect stream coords)))))))
-
+        top-y (-> page .getCropBox .getUpperRightY)
+        page-annotations (.getAnnotations page)]
+    (dorun (for [{:keys [y1 y0] :as box} boxes]
+             (let [y (- top-y y1)]
+               (.add page-annotations
+                     (-> box
+                         (assoc :y0 y)
+                         (assoc :y1 (+ y (- y1 y0) 3.0))
+                         box->annotation)))))))
 
 (defn annotate [{:keys [pdf-url output-directory table-columns?
-                        superscripts? drawn-ids? out-file]}
+                        superscripts? out-file]}
                 blocks]
   (with-open [is (.openStream (URL. pdf-url))
               doc (ext/preprocess-pdf (PDDocument/load is ""))]
@@ -89,8 +93,8 @@
            (map (fn [{:keys [type class] :as cmp}]
                   (assoc cmp :color (obj->color type class))))
            (group-by :page-number)
-           (map (fn [[page-num page-boxes]] (annotate-page {:document doc :page-num (dec page-num)
-                                                            :boxes page-boxes :drawn-ids? drawn-ids?})))
+           (map (fn [[page-num page-boxes]] (add-page-annotations {:document doc :page-num (dec page-num)
+                                                                   :boxes page-boxes})))
            dorun))
     (.save doc (or (when out-file (File. out-file)) (output-file pdf-url output-directory)))
     blocks))
