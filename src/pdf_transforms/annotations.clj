@@ -51,13 +51,14 @@
                    (str "annotated-" (rand-int 9999) ".pdf"))]
     (if out-dir (File. (File. out-dir) filename) (File. filename))))
 
-(defn box->annotation [{:keys [x0 x1 y0 y1 ^PDColor color]}]
+(defn box->annotation [{:keys [x0 x1 y0 y1 class type]}]
   (let [position (doto (PDRectangle.)
                    (.setLowerLeftX x0) (.setLowerLeftY y0)
                    (.setUpperRightX x1) (.setUpperRightY y1))]
     (doto
       (PDAnnotationSquareCircle. PDAnnotationSquareCircle/SUB_TYPE_SQUARE)
-      (.setColor (or color (pd-color :red)))
+      (.setColor (or (obj->color type class) (pd-color :red)))
+      (.setTitlePopup (str "Class: " (or type class)))
       (.setBorderStyle THICK-BORDER)
       (.setRectangle position))))
 
@@ -90,8 +91,6 @@
                                                           {:x0   x :x1 (+ x width) :y1 y :y0 (- y height)
                                                            :type :superscript :page-number page-number})))))]
       (->> boxes
-           (map (fn [{:keys [type class] :as cmp}]
-                  (assoc cmp :color (obj->color type class))))
            (group-by :page-number)
            (map (fn [[page-num page-boxes]] (add-page-annotations {:document doc :page-num (dec page-num)
                                                                    :boxes page-boxes})))

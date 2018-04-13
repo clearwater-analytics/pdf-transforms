@@ -77,10 +77,11 @@
 #_(annotate-blocks (str "file:" u/home-dir "/temp.pdf"))
 
 
-#_(->> (str u/home-dir "/Documents/pdf_parsing/control_1/raw")
+#_(let [base-dir (str u/home-dir "/Documents/pdf_parsing/control_2/")]
+  (->> (str base-dir "raw")
        u/get-pdfs-in-dir
-       (map #(annotate-blocks % {:out (str u/home-dir "/Documents/pdf_parsing/control_1/tagged")}))
-       dorun)
+       (map #(annotate-blocks % {:out (str base-dir "blocks")}))
+       dorun))
 
 
 
@@ -92,26 +93,226 @@
 
 
 
-;;;;;;;;;;;; OLDER STUFF  ;;;;;;;;;;
+;;;;;;;;;;;; SEGMENTS  ;;;;;;;;;;
+
+
+     ;;;;;  start   GAPS    ;;;;;
+(def data-rgx #".*(?:\d|[?$%]).*")
+(def word-rgx #"(?:(?:[a-zA-Z]*[aeiou][a-z]*)|(?:[aiouAIOU][a-z]?))\,?\.?")
+
+;TODO cases  -  non-cap char -> Cap character
+; , on either side (thanks edgar)
+; : or -  ... maybe ... ?
+
+;TODO unrelated to gap, but might want to filter out garbage words (transparent, _____, no text)
+
+
+(defn gap? [{x0 :x w0 :width t0 :text y0 :y fsize1 :f-size :as word1}
+            {x1 :x w1 :width t1 :text y1 :y fsize2 :f-size :as word2}]
+  (>= (- x1 (+ x0 w0))                                      ;gap on right
+      (* (cond
+           (and (b/new-font? word1 word2)                   ;between words with differing font and y vals (side by side components!)
+                (> (Math/abs (- y0 y1)) 0.5))
+           2.0
+           (or (s/ends-with? t0 ",")
+               (s/starts-with? t1 ","))
+           5.5
+           (and (re-matches word-rgx t0)                    ;between english words, optional period
+                (re-matches word-rgx t1))
+           3.0
+           (and (re-matches #".*\." t0)                    ;between english words, optional period
+                (re-matches word-rgx t1))
+           3.0
+           (and (re-matches data-rgx t0)                    ;between 'data'
+                (re-matches data-rgx t1))
+           1.25
+           (re-matches data-rgx t0) ;between 'data' and something else
+           1.75
+           ;(and (re-matches word-rgx t0)
+           ;     (re-matches #"[A-Z]" t1))
+           ;2.0
+           :else 2.0)
+         (min (/ w0 (max 1 (count t0)))
+              (/ w1 (max 1 (count t1)))))))
+
+#_(defn debug-gap! [{x0 :x w0 :width t0 :text y0 :y :as word1}
+                  {x1 :x w1 :width t1 :text y1 :y :as word2}]
+  (let [diff (- x1 (+ x0 w0))
+        avg-char-size (min (/ w0 (max 1 (count t0)))
+                           (/ w1 (max 1 (count t1))))]
+    {:diff diff
+     :avg-char-size avg-char-size
+     :ratio (/ diff avg-char-size)
+     :multiplier-class (cond
+                         (and (b/new-font? word1 word2)                   ;between words with differing font and y vals (side by side components!)
+                              (> (Math/abs (- y0 y1)) 0.5))
+                         :diff-font-and-ys
+                         (or (s/ends-with? t0 ",")
+                             (s/starts-with? t1 ","))
+                         :commas
+                         (and (re-matches word-rgx t0)                    ;between english words, optional period
+                              (re-matches word-rgx t1))
+                         :two-words
+                         (and (re-matches #".*\." t0)                    ;between english words, optional period
+                              (re-matches word-rgx t1))
+                         :period-n-word
+                         (and (re-matches data-rgx t0)                    ;between 'data'
+                              (re-matches data-rgx t1))
+                         :data-n-data
+                         (re-matches data-rgx t0) ;between 'data' and something else
+                         :data-n-anything
+                         :else :else)}))
+
 
 (defn new-segment? [{ax :x :as a} {bx :x :as b}]
-  (or (> ax bx) (utils/gap? a b) (utils/new-line? a b)))
+  (or (> ax bx) (gap? a b) (utils/new-line? a b)))
 
-(defn annotate-segments [pdf-url]
+;;;;;;   end GAPS   ;;;;;;;;
+
+
+(defn new-alignment [b1 b2]
+  (or
+    (and ())
+    )
+
+
+  )
+
+
+
+
+
+
+(def segment-decor-graph
+  {:text-list         (fnk [tokens] (map :text tokens))
+   :text              (fnk [text-list] (s/join " " text-list))
+   :avg-x             (fnk [x0 x1] (/ (+ x1 x0) 2.0))
+   :num-tokens        (fnk [tokens] (count tokens))
+   :width             (fnk [x0 x1] (int (- x1 x0)))
+   :height            (fnk [y0 y1] (int (- y1 y0)))
+   ;:bold-ratio        (fnk [tokens num-tokens] (/ (count (filter :bold? tokens)) num-tokens))
+   ;:italic-ratio      (fnk [tokens num-tokens] (/ (count (filter :italic? tokens)) num-tokens))
+   ;:all-caps-ratio    (fnk [text-list num-tokens] (/ (count (filter (partial re-matches utils/all-caps) text-list)) num-tokens))
+   ;:num-english-words (fnk [text-list] (->> text-list
+   ;                                         (keep (comp
+   ;                                                 (partial re-matches utils/eng-wordy)
+   ;                                                 #(clojure.string/replace % utils/punctuation "")))
+   ;                                         count))
+   ;:num-datapoints    (fnk [text-list] (->> text-list
+   ;                                         (keep (partial re-matches utils/datapoint))
+   ;                                         count))
+   :font              (fnk [tokens] (->> tokens (map (comp b/font-clean :font)) frequencies (apply max-key second) first))
+   :font-size         (fnk [tokens] (->> tokens (map :f-size) frequencies (apply max-key second) first))
+   })
+
+
+(def decorate-segment (graph/compile segment-decor-graph))
+
+
+
+(defn sample-blocks [n]
+  (->> (pe/extract-char-positions (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/866c354c846ed29c9d415dd6066aecd8.pdf"))
+       pd/->pages-of-words
+       (mapcat (comp
+                 (partial map (comp #(dissoc % :tokens :text-list)
+                                    #(merge % (decorate-segment %))
+                                    #(assoc (cmn/boundaries-of %) :tokens %)))
+                 (partial utils/partition-when new-segment?)))
+       (take n)))
+
+(defn y-gaps [{:keys [y1]} blocks]
+  (:gaps (reduce (fn [{:keys [gaps prev-y1]} {:keys [y0 y1]}]
+                   {:gaps    (conj gaps (- y0 prev-y1))
+                    :prev-y1 y1})
+                 {:gaps [] :prev-y1 y1} blocks)))
+
+#_(defn interblock-y-gap? [{:keys [y0 y1 line-segments] :as block} blocks-below]
+  (let []
+    (if (> (count line-segments) 1)
+
+
+      ;check average line diff,
+
+      )
+    #_(if (pos? avg-block-diff)
+        (> (- y y0 (if ss? height0 0)) (* 1.25 avg-block-diff))
+        (> (- y height)
+           (+ y0 (* (cond ss? 4.0
+                          (= (font-clean font) (font-clean font2)) 2.0
+                          :else 1.5)
+                    (min height0 height)))))
+
+    ))
+
+(defn group-vertically [block other-blocks]
+  (let [below (some->> other-blocks
+                      (filter #(= #{:below} (cmn/relative-to block %)))
+                      (sort-by :y0))]
+
+
+    ; criteria (might add features to the blocks for this)
+    ; same font and font size (When cleaned)
+    ; y gap is not too large
+    ; y gap between this line and the next line is smaller or roughly equal to that between the next line and the one after it
+    ; horizontal alignment is the same (account for tabbed paragraph starts)
+    ; returns a vector of form [block remaining-blocks]
+
+    )
+
+  ;TODO need to account for font changes,
+  )
+
+
+#_(some->> blocks
+         (filter #(= #{:below} (cmn/relative-to table %)))
+         not-empty
+         (sort-by :y0)
+         (cmn/compose-groups
+           {:terminates? terminate-down?
+            :irrelevant? (fn [& _] false)
+            :add-to      (fn [component block]
+                           (if component
+                             (update component :blocks #(conj % block))
+                             {:type :table :blocks [block]}))})
+         first
+         :blocks
+         not-empty
+         (valid-extension table)
+         (mapcat :content)
+         cmn/boundaries-of)
+
+
+;TODO implement algorithm
+; grab 2 segments directly below this one
+
+;TODO can worry about performance later
+(defn merge-segments-vertically [segments]
+  (loop [blocks []
+         remaining segments]
+    (let [[block outside-of] (group-vertically (first remaining) (rest remaining))]
+      (recur (conj blocks block) outside-of))))
+
+#_(defn annotate-segments [pdf-url & [{:keys [out]}]]
   (->> (pe/extract-char-positions pdf-url)
        pd/->pages-of-words
-       (mapcat (partial utils/partition-when new-segment?))
-       (map cmn/boundaries-of)
-       (a/annotate {:pdf-url pdf-url :output-directory u/annotated-dir})))
+       (mapcat (comp
+                 merge-segments-vertically
+                 (partial map #(assoc (cmn/boundaries-of %) :line-segments [%]))
+                 (partial utils/partition-when new-segment?)))
+       (a/annotate {:pdf-url pdf-url :output-directory (or out u/annotated-dir)})))
+
+(defn annotate-segments [pdf-url & [{:keys [out]}]]
+  (->> (pe/extract-char-positions pdf-url)
+       pd/->pages-of-words
+       (mapcat (comp
+                 (partial map #(assoc (cmn/boundaries-of %) :line-segments [%] :class :generic))
+                 (partial utils/partition-when new-segment?)))
+       (a/annotate {:pdf-url pdf-url :output-directory (or out u/annotated-dir)})))
 
 
 
-;TODO try to learn a (linear) classifier in place of new-segment?
-; additional features might be the types of the data, the actual x distance between them (instead of the gap? call)
-
-#_(core/annotate-components (str "file:" u/dir "title-table-side-by-side.pdf"))
-
-#_(->> u/dir
-       u/get-pdfs-in-dir
-       (map annotate-segments)
-       dorun)
+#_(let [base-dir (str u/home-dir "/Documents/pdf_parsing/control_gap/")]
+    (->> (str base-dir "raw")
+         u/get-pdfs-in-dir
+         (map #(annotate-segments % {:out (str base-dir "segments")}))
+         dorun))
