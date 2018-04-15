@@ -16,28 +16,28 @@
     (< (Math/abs (- y y0)) 2)
     (neg? (- x x0))))
 
-(defn same-word? [{x0 :x w0 :width y0 :y f-size0 :f-size cg :char-gap}
-                  {:keys [x y f-size]}]
+(defn same-word? [{x0 :x w0 :width y0 :y font-size0 :font-size cg :char-gap}
+                  {:keys [x y font-size]}]
   (and
-    ;(= f-size0 f-size)
+    ;(= font-size0 font-size)
     (<= (dec (Math/abs (- x (+ w0 x0)))) (or cg 0))
     (< (Math/abs (- y0 y)) 4)))
 
 ;is the superscript on the right of the modified term
-(defn super-scripted-right? [{y0 :y f-size0 :f-size :as word}
-                              {:keys [y f-size] :as char}]
+(defn super-scripted-right? [{y0 :y font-size0 :font-size :as word}
+                              {:keys [y font-size] :as char}]
   (and
     (not (utils/gap? word char))
-    (< f-size f-size0)
+    (< font-size font-size0)
     (pos? (- y0 y 1))))
 
-(defn super-scripted-left? [words {:keys [y height f-size horizontal-bar?]}]
-  (let [{ss-y :y ss-size :f-size ss-text :text
+(defn super-scripted-left? [words {:keys [y height font-size horizontal-bar?]}]
+  (let [{ss-y :y ss-size :font-size ss-text :text
          ss-hbar? :horizontal-bar? :as ss-word} (peek words)]
     (and
       (not horizontal-bar?)
       (not ss-hbar?)
-      (> f-size ss-size)
+      (> font-size ss-size)
       (utils/between? ss-y (- y height height) (+ y height))
       (if-let [p-word (peek (pop words))]
         (or (utils/gap? p-word ss-word) (utils/new-line? p-word ss-word))
@@ -45,11 +45,11 @@
       (< (count ss-text) 4))))
 
 
-(defn super-script? [{y0 :y f-size0 :f-size supe? :superscript?}
-                       {:keys [y f-size]}]
+(defn super-script? [{y0 :y font-size0 :font-size supe? :superscript?}
+                       {:keys [y font-size]}]
   (and
     supe?
-    (> f-size f-size0)
+    (> font-size font-size0)
     (pos? (- y y0 1))))
 
 (def whitespace #"\s*")
@@ -78,11 +78,11 @@
                             [(first chars)]
                             (rest chars))))
        rseq
-       (reduce (fn [words {:keys [y f-size] :as curr-word}]
-                 (let [{wy :y wf-size :f-size ss? :superscript?} (peek words)]
+       (reduce (fn [words {:keys [y font-size] :as curr-word}]
+                 (let [{wy :y wfont-size :font-size ss? :superscript?} (peek words)]
                    (conj words (if (and ss?
                                         (utils/within-x? 1 wy y)
-                                        (= f-size wf-size))
+                                        (= font-size wfont-size))
                                  (assoc curr-word :superscript? true)
                                  curr-word)))) [])
        rseq))
@@ -90,7 +90,7 @@
 (defn build-id [{:keys [page-number x y]}]
   (str page-number "_" (int x) "_" (int y)))
 
-(defn ->pages-of-words [text-positions]
+(defn text-positions->pages-of-tokens [text-positions]
   (->> text-positions
        (map #(assoc % :id (build-id %)))
        paginate

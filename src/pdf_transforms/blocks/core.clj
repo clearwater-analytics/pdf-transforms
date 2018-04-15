@@ -10,9 +10,9 @@
 (defn font-clean [font]
   (s/replace font font-noise ""))
 
-(defn new-font? [{font2 :font f-size2 :f-size} {:keys [font f-size]}]
+(defn new-font? [{font2 :font font-size2 :font-size} {:keys [font font-size]}]
   (or (not= (font-clean font) (font-clean font2))
-      (not= f-size f-size2)))
+      (not= font-size font-size2)))
 
 (defn font-switch? [block token]
   (new-font? token (peek block)))
@@ -61,6 +61,38 @@
   (or
     (utils/gap? (peek block) (first stream))
     (utils/gap? (last-in-segment stream) (first block))))
+
+(def data-rgx #".*(?:\d|[?$%]).*")
+(def word-rgx #"(?:(?:[a-zA-Z]*[aeiou][a-z]*)|(?:[aiouAIOU][a-z]?))\,?\.?")
+
+(defn horizontal-gap? [{x0 :x w0 :width t0 :text y0 :y fsize1 :font-size :as word1}
+            {x1 :x w1 :width t1 :text y1 :y fsize2 :font-size :as word2}]
+  (>= (- x1 (+ x0 w0))                                      ;gap on right
+      (* (cond
+           (and (new-font? word1 word2)                   ;between words with differing font and y vals (side by side components!)
+                (> (Math/abs (- y0 y1)) 0.5))
+           2.0
+           (or (s/ends-with? t0 ",")
+               (s/starts-with? t1 ",")
+               (= "$" t0))
+           5.5
+           (and (re-matches word-rgx t0)                    ;between english words, optional period
+                (re-matches word-rgx t1))
+           3.0
+           (and (re-matches #".*\." t0)                     ;between english words, optional period
+                (re-matches word-rgx t1))
+           3.0
+           (and (re-matches data-rgx t0)                    ;between 'data'
+                (re-matches data-rgx t1))
+           1.25
+           (re-matches data-rgx t0)                         ;between 'data' and something else
+           1.75
+           :else 2.0)
+         (min (/ w0 (max 1 (count t0)))
+              (/ w1 (max 1 (count t1)))))))
+
+(defn new-segment? [{ax :x :as a} {bx :x :as b}]
+  (or (> ax bx) (horizontal-gap? a b) (utils/new-line? a b)))
 
 (def tokens->basic-blocks
   (partial cmn/compose-groups

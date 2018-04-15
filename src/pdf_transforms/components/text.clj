@@ -49,8 +49,8 @@
                                    (drop-while #(not (:below (cmn/relative-to nearest %))))
                                    (take-while (fn [{tx0 :x0 words :content}]
                                                  (and (neg? (- x0 tx0 5)) ; horizontal indentation is at least as great as nearest's
-                                                      (>= (-> nearest :content first :f-size)
-                                                         (-> words first :f-size)))))))]
+                                                      (>= (-> nearest :content first :font-size)
+                                                         (-> words first :font-size)))))))]
     (if (and nearest (< (- x0 kc-x1) 150)) (concat on-right neighbors))))
 
 (defn label-vals-bounds [blocks keys-column]

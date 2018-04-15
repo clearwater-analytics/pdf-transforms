@@ -2,7 +2,7 @@
   "Utility functions that are used at various points in the transformation processes."
   (:require [clojure.string :as s]))
 
-(def dummy-token {:y 1.0 :width 1.0 :font "Pseudo-text" :id "0_0_0" :f-size 0.0 :page-number 1 :x 1.0 :height 1.0 :text ""})
+(def dummy-token {:y 1.0 :width 1.0 :font "Pseudo-text" :id "0_0_0" :font-size 0.0 :page-number 1 :x 1.0 :height 1.0 :text ""})
 
 (def punctuation #"['\")(:,;*-.]+")
 (def eng-wordy #"[a-zA-Z]*[aeiou][a-z]*")
@@ -56,11 +56,16 @@
     (pos? (- y h prev-y ph))
     (pos? (- y h prev-y))))
 
+(defn asci-line? [{prev-y :y ph :height} {y :y h :height t :text}]
+  (and (pos? (- y 1 prev-y))
+       (= "_" t)))
+
 (defn create-lines [positional-data]
   (let [positional-data (sort-by :y positional-data)]
     (map (partial sort-by :x)
          (reduce (fn [lines datum]
-                   (if (new-line? (first (peek lines)) datum) ;maybe pass the whole group and the next few positional-data
+                   (if (or (new-line? (first (peek lines)) datum)
+                           (asci-line? (first (peek lines)) datum)) ;maybe pass the whole group and the next few positional-data
                      (conj lines [datum])
                      (conj (pop lines) (conj (peek lines) datum))))
                  [[(first positional-data)]]

@@ -23,7 +23,7 @@
 (defn pages-of-words [pdf-path & [page-bounds]]
   (->> page-bounds
        (pe/extract-char-positions pdf-path)
-       pd/->pages-of-words))
+       pd/text-positions->pages-of-tokens))
 
 
 (defn- pdf->pages-of-lines [pdf-path & [page-bounds]]

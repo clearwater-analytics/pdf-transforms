@@ -16,7 +16,7 @@
 (s/def ::text string?)
 (s/def ::bold? boolean?)
 (s/def ::italic? boolean?)
-(s/def ::f-size number?)
+(s/def ::font-size number?)
 (s/def ::x coordinate?)
 (s/def ::y coordinate?)
 (s/def ::height number?)
@@ -34,10 +34,10 @@
            (and (< y0 y1) (< x0 x1)))))
 
 (s/def ::raw-token
-  (s/keys :req-un [::text ::bold? ::f-size ::italic? ::x ::y ::height ::width ::page-number]))
+  (s/keys :req-un [::text ::bold? ::font-size ::italic? ::x ::y ::height ::width ::page-number]))
 
 (s/def ::token
-  (s/keys :req-un [::text ::f-size ::id ::height ::width ::x ::y ::page-number]
+  (s/keys :req-un [::text ::font-size ::id ::height ::width ::x ::y ::page-number]
           :opt-un [::bold? ::italic? ::superscript?]))
 
 (s/def ::content (s/coll-of ::raw-token))

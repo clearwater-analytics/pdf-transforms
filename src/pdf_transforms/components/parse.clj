@@ -50,14 +50,14 @@
 (defn build-cells [words]
   (reduce (fn [stream {c-x :x c-text :text ss? :superscript? :as curr-datum}]
             (if-let [last-datum (peek stream)]
-              (let [{:keys [x width text f-size]} last-datum
+              (let [{:keys [x width text font-size]} last-datum
                     x1 (+ x width)
                     gap-width (- c-x x1)]
                 (cond
                   (or (re-matches #"\s*[$]\s*" text)        ;should be same cell
                       (re-matches #"[.]{2,}|[%]" c-text)
                       ss?
-                      (<= gap-width (* 0.417 (min 12 f-size))))
+                      (<= gap-width (* 0.417 (min 12 font-size))))
                   (conj (pop stream) (conj-words last-datum curr-datum))
                   :default (conj stream curr-datum)))
               (conj stream curr-datum)))
@@ -74,10 +74,10 @@
 (defn join-headers-on-line [words]
   (reduce (fn [stream {c-x :x ss? :superscript? :as curr-datum}]
             (if-let [last-data (peek stream)]
-              (let [{:keys [x width f-size]} (peek last-data)
+              (let [{:keys [x width font-size]} (peek last-data)
                     x1 (+ x width)
                     gap-width (- c-x x1)]
-                (if (or ss? (<= gap-width (* 0.417 (min 12 f-size))))
+                (if (or ss? (<= gap-width (* 0.417 (min 12 font-size))))
                   (conj (pop stream) (conj last-data curr-datum))
                   (conj stream [curr-datum])))
               (conj stream [curr-datum])))
