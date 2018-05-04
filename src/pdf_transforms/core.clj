@@ -6,10 +6,10 @@
             [pdf-transforms.components.core :as cmps]
             [pdf-transforms.utilities :as utils]
             [pdf-transforms.annotations :as ann]
-            [pdf-transforms.common :as cmn]
-            [pdf-transforms.blocks.core :as blks]
             [pdf-transforms.blocks.features :as f]
-            [pdf-transforms.blocks.classify :as cls])
+            [pdf-transforms.blocks.classify :as cls]
+            [pdf-transforms.blocks.segments :as bs]
+            [pdf-transforms.blocks.core :as bc])
   (:import (org.apache.pdfbox.text PDFTextStripper)))
 
 (def pdf->text
@@ -29,20 +29,22 @@
 (defn- pdf->pages-of-lines [pdf-path & [page-bounds]]
   (map utils/create-lines (pages-of-words pdf-path page-bounds)))
 
+(def formats [:tokens :segments :blocks :components])
 
-(defn page->compositions [page {:keys [compose-components?]}]
-  (cond->> (blks/blocks-on-page page)
-           true f/enfeature-blocks
-           true (map cls/add-class)
-           compose-components? (cmps/->components page)
-           compose-components? (map #(dissoc % :class))
-           true cmn/sort-blocks))
+(defn parse-page [page-of-tokens & [{:keys [format] :or {format :components}}]]
+  (let [lvl (.indexOf formats format)]
+    (cond->> page-of-tokens
+             (> lvl 0) bs/compose-segments
+             (> lvl 1) bc/compose-blocks
+             (> lvl 2) f/enfeature-blocks
+             (> lvl 2) (map cls/add-class)
+             (> lvl 2) (cmps/->components page-of-tokens)
+             (> lvl 2) (map #(dissoc % :class)))))
 
 
 (defn- block-transforms [pdf-path {:keys [page-bounds] :as opts}]
   (->> (pages-of-words pdf-path page-bounds)
-       (mapcat #(page->compositions % opts))))
-
+       (mapcat #(parse-page % opts))))
 
 (defn transform
   "Transforms pages in the range [(first page-bounds) , (last page-bounds))
@@ -50,10 +52,10 @@
    Supported formats include blocks, plain-text, pages-of-lines, and components (default)."
   [pdf-path & [{:keys [page-bounds format] :as opts}]]
   (case (keyword format)
-    :blocks (block-transforms pdf-path opts)
     :plain-text  (pdf->text pdf-path page-bounds)
     :pages-of-lines (pdf->pages-of-lines pdf-path page-bounds)
-    (block-transforms pdf-path (assoc opts :compose-components? true))))
+    (->> (pages-of-words pdf-path page-bounds)
+         (mapcat #(parse-page % opts)))))
 
 
 (defn annotate-components
