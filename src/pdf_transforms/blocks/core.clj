@@ -19,7 +19,7 @@
                        (vertically-near? (last candidates) seg))
                 (let [{cands :candidates :as hypothesis} (-> box (utils/expand-bounds seg) (update :candidates conj seg))]
                   (if (some (fn [seg-x] (and (empty? (cmn/relative-to hypothesis seg-x)) ;within block
-                                             (not (some (partial = seg-x) cands))))
+                                             (not (some (partial = seg-x) cands)))) ;but not a candidate
                             (concat other-segments blocks))
                     (reduced box)
                     hypothesis))

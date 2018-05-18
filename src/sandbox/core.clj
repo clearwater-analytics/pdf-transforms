@@ -4,6 +4,7 @@
             [pdf-transforms.blocks.core :as bc]
             [pdf-transforms.blocks.segments :as bs]
             [pdf-transforms.annotations :as a]
+            [pdf-transforms.core :as core]
             [sandbox.utils :as u]
             [pdf-transforms.utilities :as utils]))
 
@@ -30,27 +31,6 @@
 ;  (or (> ax bx) (horizontal-gap? a b) (utils/new-line? a b)))
 
 
-(defn parse-segments [page-of-tokens]
-  (reduce (fn [{:keys [current-seg] :as acc} {bx :x :as btoken}]
-            (let [{ax :x :as atoken} (last current-seg)]
-              (cond
-                (or (> ax bx) (utils/new-line? atoken btoken))
-                (-> acc (update :segments conj current-seg) (assoc :current-seg [btoken]))
-                ;OR gap that persists above and below
-
-
-                )
-
-
-
-              )
-
-
-            )
-
-
-    {:segments []
-     :current-seg []} page-of-tokens))
 
 ;;;;;;;;;;;; SEGMENTS  ;;;;;;;;;;
 

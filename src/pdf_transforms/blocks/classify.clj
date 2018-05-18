@@ -12,22 +12,22 @@
 
 (defn label? [{{:keys [num-tokens
                        num-lines]} :features
-               content             :content}]
+               tokens             :tokens}]
   (and
     (pos? num-tokens)
     (< num-tokens 20)
     ;(< (/ num-tokens num-lines) 8)
-    (re-matches header-like (s/join " " (map :text content)))))
+    (re-matches header-like (s/join " " (map :text tokens)))))
 
 (defn page-footer? [{{:keys [num-components-below
                              itemized-start?]} :features
-                     content             :content}]
-  (and (or itemized-start? (re-matches page-footer (s/join " " (map :text content))))
+                     tokens             :tokens}]
+  (and (or itemized-start? (re-matches page-footer (s/join " " (map :text tokens))))
        (<= num-components-below 2)))
 
 (defn table-footer? [{{:keys [superscript-start?]} :features
-                      content :content}]
-  (let [as-text (s/join " " (map :text content))]
+                      tokens :tokens}]
+  (let [as-text (s/join " " (map :text tokens))]
     (or
       (re-matches utils/dash-line as-text)                  ;____ or ----- line
       superscript-start?
@@ -53,11 +53,11 @@
 
 (defn key-column? [{{:keys [num-components-right keyword-start?
                              num-lines]} :features
-                    content :content}]
+                    tokens :tokens}]
   (and (pos? num-components-right)
        (> num-lines 1)
        keyword-start?
-       (> (->> content
+       (> (->> tokens
                utils/create-lines
                (map (comp (partial s/join " ") (partial map :text)))
                (filter (partial re-matches utils/delimited))

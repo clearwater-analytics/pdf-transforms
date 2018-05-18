@@ -26,20 +26,20 @@
 (defn label-ish? [{{:keys [num-tokens
                            num-lines
                            bold-ratio]} :features
-                   content             :content}]
+                   tokens             :tokens}]
   (and
     (pos? num-tokens)
     (< (/ num-tokens num-lines) 5)
     (> bold-ratio 0.75)
-    (re-matches header-like (s/join " " (map :text content)))))
+    (re-matches header-like (s/join " " (map :text tokens)))))
 
 (defn label-like? [{{:keys [num-tokens
                             num-lines]} :features
-                    content             :content}]
+                    tokens             :tokens}]
   (and
     (< num-tokens 14)
     (< (/ num-tokens num-lines) 8)
-    (re-matches header-like (s/join " " (map :text content)))))
+    (re-matches header-like (s/join " " (map :text tokens)))))
 
 (defn expand-bounds [component {:keys [x0 x1 y0 y1]}]
   (-> component

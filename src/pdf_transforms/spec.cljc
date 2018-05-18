@@ -40,10 +40,10 @@
   (s/keys :req-un [::text ::font-size ::id ::height ::width ::x ::y ::page-number]
           :opt-un [::bold? ::italic? ::superscript?]))
 
-(s/def ::content (s/coll-of ::raw-token))
+(s/def ::tokens (s/coll-of ::raw-token))
 
 (s/def ::block
-  (s/merge ::boundaries (s/keys :req-un [::features ::content])))
+  (s/merge ::boundaries (s/keys :req-un [::features ::tokens])))
 
 ;;;;;;;;;;;;;;;;;;;;;;
 ;;   Components     ;;

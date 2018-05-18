@@ -39,74 +39,21 @@
 ;blocks period density
 ;blocks border padding
 ;TODO will need to adjust what is fed into this system
-(def feature-graph
-  "{{:keys [x0 x1 y0 y1 content neighbors]}}"
-  {
-   :relatives            (fnk [x0 x1 y0 y1 {neighbors nil}]
-                           (map (partial cmn/relative-to {:x0 x0 :x1 x1 :y0 y0 :y1 y1}) neighbors))
-   :lines                (fnk [content] (utils/create-lines content))
-   :text-list            (fnk [content] (map :text content))
-   :as-test              (fnk [text-list] (s/join " " text-list))
-   :num-tokens           (fnk [content] (count content))
-   :horizontal-alignment (fnk [x0 x1] (cond
-                                        (utils/within-x? 50 x0 LEFT-MARGIN) :left
-                                        (utils/within-x? 20 CENTER-PAGE (/ (+ x1 x0) 2)) :center
-                                        :else :right))
-   :width                (fnk [x0 x1] (int (- x1 x0)))
-   :height               (fnk [y0 y1] (int (- y1 y0)))
-   :bold-ratio           (fnk [content num-tokens] (/ (count (filter :bold? content)) num-tokens))
-   :italic-ratio         (fnk [content num-tokens] (/ (count (filter :italic? content)) num-tokens))
-   :all-caps-ratio       (fnk [text-list num-tokens] (/ (count (filter (partial re-matches utils/all-caps) text-list)) num-tokens))
-   :ends-with-period?    (fnk [text-list] (boolean (re-matches utils/sentence-ending (last text-list))))
-   :num-english-words    (fnk [text-list]
-                           (->> text-list
-                                (keep (comp
-                                        (partial re-matches utils/eng-wordy)
-                                        #(clojure.string/replace % utils/punctuation "")))
-                                count))
-   :num-datapoints       (fnk [text-list]
-                           (->> text-list
-                                (keep (partial re-matches utils/datapoint))
-                                count))
-   :uniform-line-width?  (fnk [lines] (uniform-line-width? lines))
-   :num-lines            (fnk [lines] (count lines))
-   :num-sentences        (fnk [content]
-                           (->> content
-                                (remove :superscript?)
-                                (map :text)
-                                (filter (partial re-matches utils/sentence-ending))
-                                count))
-   :keyword-start?       (fnk [text-list]
-                           (->> text-list
-                                (take 10)
-                                (some (partial re-matches utils/delimited))
-                                boolean))
-   :itemized-start?      (fnk [content as-text] (boolean (or (:superscript? (first content)) ;line starts with a superscript
-                                                             (re-matches footnote as-text))))
-   :num-components-above (fnk [relatives] (count (filter :above relatives)))
-   :num-components-below (fnk [relatives] (count (filter :below relatives)))
-   :num-components-right (fnk [relatives] (count (filter (partial = #{:right}) relatives)))
-   :num-components-left  (fnk [relatives] (count (filter (partial = #{:left}) relatives)))})
 
-(def features2 (graph/compile feature-graph))
-
-(defn enfeature-blocks2 [blocks]
-  (map #(assoc % :features (features2 (merge % {:neighbors blocks}))) blocks))
-
-(defn features [{:keys [x0 x1 y0 y1 content] :as cmpnt} & [other-components]]
+(defn features [{:keys [x0 x1 y0 y1 tokens] :as cmpnt} & [other-components]]
   (let [relatives (map (partial cmn/relative-to cmpnt) other-components)
-        lines (utils/create-lines content)
-        text-list (map :text content)
+        lines (utils/create-lines tokens)
+        text-list (map :text tokens)
         as-text (s/join " " text-list)
-        num-tokens (count content)]
+        num-tokens (count tokens)]
     (merge {:horizontal-alignment (cond
                                     (utils/within-x? 50 x0 LEFT-MARGIN) :left
                                     (utils/within-x? 20 CENTER-PAGE (/ (+ x1 x0) 2)) :center
                                     :else :right)
             :width                (int (- x1 x0))
             :height               (int (- y1 y0))
-            :bold-ratio           (/ (count (filter :bold? content)) num-tokens)
-            :italic-ratio         (/ (count (filter :italic? content)) num-tokens)
+            :bold-ratio           (/ (count (filter :bold? tokens)) num-tokens)
+            :italic-ratio         (/ (count (filter :italic? tokens)) num-tokens)
             :all-caps-ratio       (/ (count (filter (partial re-matches utils/all-caps) text-list)) num-tokens)
             :ends-with-period?    (boolean (re-matches utils/sentence-ending (last text-list)))
             :num-english-words    (->> text-list
@@ -122,14 +69,14 @@
             :num-lines            (:sum (reduce (fn [{:keys [sum prev-y]} {y :y}]
                                                   {:sum    (+ sum (if (> (- y prev-y) 4) 1 0))
                                                    :prev-y y})
-                                                {:sum 1 :prev-y 1000} (sort-by :y content)))
-            :num-sentences        (->> content
+                                                {:sum 1 :prev-y 1000} (sort-by :y tokens)))
+            :num-sentences        (->> tokens
                                        (remove :superscript?)
                                        (map :text)
                                        (filter (partial re-matches utils/sentence-ending))
                                        count)
             :keyword-start?       (boolean (some (partial re-matches utils/delimited) (take 10 text-list)))
-            :itemized-start?      (boolean (or (:superscript? (first content)) ;line starts with a superscript
+            :itemized-start?      (boolean (or (:superscript? (first tokens)) ;line starts with a superscript
                                                (re-matches footnote as-text)))}
            (if other-components
              {:num-components-above (count (filter :above relatives))

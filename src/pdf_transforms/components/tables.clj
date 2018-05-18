@@ -29,14 +29,14 @@
 
 (defn grouping? [{{:keys [num-tokens
                           num-lines]} :features
-                  content             :content
+                  tokens             :tokens
                   :as                 this}
                  stream]
   (if num-tokens
     (and
       (< num-tokens 8)
       (= 1 num-lines)
-      (re-matches utils/header-like (s/join " " (map :text content)))
+      (re-matches utils/header-like (s/join " " (map :text tokens)))
       (let [nxt-item (first (filter #(= #{:below} (cmn/relative-to this %)) stream))]
         (and
           (cmn/data-column? nxt-item)
@@ -57,16 +57,16 @@
 (def page-footer #"(?:[Pp][aAgGeE]{0,3}\s*[.]?\s*\d.*)|[-]?\s*\d{0,3}\s*[-]?")
 (def footnote #"(?:[*+†]|\(\d{1,2}\))\s*[a-zA-Z]+.*")
 
-(defn page-footer? [{:keys [content]} stream]
+(defn page-footer? [{:keys [tokens]} stream]
   (and
-    (re-matches page-footer (s/join " " (map :text content)))
+    (re-matches page-footer (s/join " " (map :text tokens)))
     (<= (count stream) 2)))
 
-(defn table-footer? [{:keys [content]}]
-  (let [as-text (s/join " " (map :text content))]
+(defn table-footer? [{:keys [tokens]}]
+  (let [as-text (s/join " " (map :text tokens))]
     (or
       (re-matches utils/dash-line as-text)                  ;____ or ----- line
-      (:superscript? (first content))                       ;line starts with a superscript
+      (:superscript? (first tokens))                       ;line starts with a superscript
       (re-matches footnote as-text))))                      ;lines starts with what should be a superscript
 
 
@@ -76,10 +76,10 @@
     (grouping? nxt-block stream)
     (summary-row? nxt-block stream)))
 
-(defn ruins-columns? [{tbl-content :content} {blk-content :content}]
-  (if tbl-content
-    (let [empty-col-pixels (->> tbl-content utils/create-lines prs/column-bounds cols/columns-as-pixel-range)
-          blk-occupied-pixels (->> blk-content
+(defn ruins-columns? [{tbl-tokens :tokens} {blk-tokens :tokens}]
+  (if tbl-tokens
+    (let [empty-col-pixels (->> tbl-tokens utils/create-lines prs/column-bounds cols/columns-as-pixel-range)
+          blk-occupied-pixels (->> blk-tokens
                                    (sort-by :x)
                                    (map (fn [{:keys [x width]}] {:x0 (int x) :x1 (int (+ x width))}))
                                    cols/columns-as-pixel-range)
@@ -109,10 +109,10 @@
   (-> table
       (assoc :page-number page-number)
       (utils/expand-bounds blk)
-      (update :content #(conj % blk))))
+      (update :tokens #(conj % blk))))
 
-(defn grab-headers-new [all-blocks {:keys [content] :as tbl}]
-  (let [block (mapcat :content content)
+(defn grab-headers-new [all-blocks {:keys [tokens] :as tbl}]
+  (let [block (mapcat :tokens tokens)
         block-as-lines (utils/create-lines block)]
     (if-let [index (cmn/header-index block-as-lines)]
       (let [head-block (->> block-as-lines (take (inc index)) flatten cmn/boundaries-of)
@@ -122,7 +122,7 @@
                                       (= #{} (cmn/relative-to tbl blk)) ;partially inline with other header row
                                       (let [rel (cmn/relative-to head-block blk)]
                                         (or (= #{:right} rel) (= #{:left} rel))))))
-                          (mapcat :content)
+                          (mapcat :tokens)
                           cmn/boundaries-of)]
         {:y0 (apply min (or y0 1000) (map (fn [{:keys [y height]}] (- y height)) block))
          :y1 (apply max (map :y (nth block-as-lines index)))
@@ -131,7 +131,7 @@
                           (>= (/ (count (filter identity (map utils/label-like? blocks)))
                                  (max (count blocks) 1))
                               0.5))
-            tbl-xys (->> content (map (fn [{:keys [x0 y0]}] (str x0 "_" y0))) (into #{}))
+            tbl-xys (->> tokens (map (fn [{:keys [x0 y0]}] (str x0 "_" y0))) (into #{}))
             above-candidates (filter (fn [blk]
                                        (= #{:above} (cmn/relative-to tbl blk))) all-blocks)
             inline-candidates (filter
@@ -172,7 +172,7 @@
                               :blocks
                               not-empty
                               (valid-extension table)
-                              (mapcat :content)
+                              (mapcat :tokens)
                               cmn/boundaries-of)]
     (utils/expand-bounds table expansion)
     table))
@@ -191,8 +191,8 @@
                            (conj (pop tables) (add-to-table table col))
                            (conj tables (add-to-table {:x0 1000 :x1 0 :y0 1000 :y1 0} col)))))
                      [(add-to-table {:x0 1000 :x1 0 :y0 1000 :y1 0} (first %))] (rest %)))
-           (filter #(> (count (:content %)) 1))
-           (keep #(let [{dx0 :x0 dx1 :x1 dy1 :y1 dy0 :y0 page-num :page-number tbl-blocks :content :as tbl} %
+           (filter #(> (count (:tokens %)) 1))
+           (keep #(let [{dx0 :x0 dx1 :x1 dy1 :y1 dy0 :y0 page-num :page-number tbl-blocks :tokens :as tbl} %
                         {:keys [x0 x1 y0 y1]} (grab-headers-new blocks tbl)]
                    (if y1
                      {:y0     (min dy0 y0)
@@ -200,9 +200,9 @@
                       :x0     (min dx0 x0)
                       :x1     (max dx1 x1)
                       :page-number page-num
-                      :content (mapcat :content tbl-blocks)})))
+                      :tokens (mapcat :tokens tbl-blocks)})))
            (map (comp
-                  #(dissoc % :content)
+                  #(dissoc % :tokens)
                   #(expand-down % blocks)))
            (sort-by (fn [{:keys [x0 x1 y0 y1]}] (* -1.0 (- x1 x0) (- y1 y0)))) ;sort by area, descending
            (reduce (fn [uniques tbl]
