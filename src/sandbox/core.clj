@@ -6,7 +6,9 @@
             [pdf-transforms.annotations :as a]
             [pdf-transforms.core :as core]
             [sandbox.utils :as u]
-            [pdf-transforms.utilities :as utils]))
+            [pdf-transforms.utilities :as utils]
+            [pdf-transforms.blocks.features :as f]
+            [pdf-transforms.blocks.classify :as cls]))
 
 
 ;TODO better gap logic
@@ -40,7 +42,9 @@
   (let [lvl (.indexOf levels level)]
     (cond->> page-of-tokens
              (> lvl 0) bs/compose-segments
-             (> lvl 1) bc/compose-blocks)))
+             (> lvl 1) bc/compose-blocks
+             (> lvl 1) f/enfeature-blocks
+             (> lvl 1) (map cls/add-class))))
 
 (defn annotate-em [pdf-url & [{:keys [out] :as opts}]]
   (->> (pe/extract-char-positions pdf-url)
@@ -48,9 +52,9 @@
        (mapcat #(parse-page % opts))
        (a/annotate {:pdf-url pdf-url :output-directory (or out u/annotated-dir)})))
 
-#_(->> (str "transposed_table" ".pdf")
+#_(->> (str "866c354c846ed29c9d415dd6066aecd8" ".pdf")
        (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/")
-       (#(annotate-em % {:level :segments}))
+       (#(annotate-em % {:level :tokens}))
        (map #(dissoc % :tokens)))
 
 #_(let [base-dir (str u/home-dir "/Documents/pdf_parsing/control_2/")]

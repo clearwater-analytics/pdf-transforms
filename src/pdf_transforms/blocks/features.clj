@@ -2,9 +2,7 @@
   "Functions to determine feature values and to associate blocks with their feature values"
   (:require [pdf-transforms.utilities :as utils]
             [pdf-transforms.common :as cmn]
-            [clojure.string :as s]
-            [plumbing.core :refer [fnk]]
-            [plumbing.graph :as graph]))
+            [clojure.string :as s]))
 
 ;50 -> 600
 (def LEFT-MARGIN 50)
@@ -87,8 +85,6 @@
 
 (defn enfeature-blocks [blocks]
   (map #(assoc % :features (features % blocks)) blocks))
-
-
 
 ;classes
 ; table-column, table-column-header, text, page-footer, table-footer, label, value, data-point
