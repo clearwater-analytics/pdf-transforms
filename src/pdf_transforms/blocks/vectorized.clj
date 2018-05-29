@@ -5,6 +5,20 @@
 ;            [clojure.string :as s]
 ;            [pdf-transforms.utilities :as utils]))
 ;
+
+
+;TODO goal is to create a single input vector which can be fed into a ML algorithm for classification
+;  For which quadrants this block is in, use a bit map (i.e. [1 1 0 0] -> it is in the first 2 quadrants)
+;  For neighbors/context, allocate room for 5 blocks in each of the 4 directions  (i.e. each direction has 5 blocks, so the bottom-neighbors for the lowest block would be [nil nil nil nil nil])
+;  Just concat all of the vectors together to form input
+
+
+;  THIS-blocks-vector + other-context + above-neighbor-1-vector + above-neighbor-2-vector
+;  + ... + above-neighbor-5-vector + right-neighbor-1-vector + ... + above-neighbor-5-vector
+
+
+
+
 ;(def feature-graph
 ;  {:width             (fnk [x0 x1] (int (- x1 x0)))
 ;   :height            (fnk [y0 y1] (int (- y1 y0)))

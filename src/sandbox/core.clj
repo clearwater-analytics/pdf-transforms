@@ -8,7 +8,8 @@
             [sandbox.utils :as u]
             [pdf-transforms.utilities :as utils]
             [pdf-transforms.blocks.features :as f]
-            [pdf-transforms.blocks.classify :as cls]))
+            [pdf-transforms.blocks.classify :as cls]
+            [pdf-transforms.components.core :as cmps]))
 
 
 ;TODO better gap logic
@@ -39,27 +40,39 @@
 (def levels [:tokens :segments :blocks :components])
 
 (defn parse-page [page-of-tokens & [{:keys [level] :or {level :components}}]]
-  (let [lvl (.indexOf levels level)]
+  (let [lvl (.indexOf levels level)
+        token->ann-format (fn [{:keys [x width y height] :as token}]
+                            (assoc token :x0 x :x1 (+ x width) :y0 (- y height) :y1 y ))]
     (cond->> page-of-tokens
+             (zero? lvl) (map token->ann-format)            ;just for the sake of annotating tokens
              (> lvl 0) bs/compose-segments
              (> lvl 1) bc/compose-blocks
              (> lvl 1) f/enfeature-blocks
-             (> lvl 1) (map cls/add-class))))
+             (> lvl 1) (map cls/add-class)
+             (> lvl 2) (cmps/->components page-of-tokens)
+             (> lvl 2) (map #(dissoc % :class)))))
 
-(defn annotate-em [pdf-url & [{:keys [out] :as opts}]]
-  (->> (pe/extract-char-positions pdf-url)
-       pd/text-positions->pages-of-tokens
-       (mapcat #(parse-page % opts))
-       (a/annotate {:pdf-url pdf-url :output-directory (or out u/annotated-dir)})))
+(defn annotate-it [pdf-url & [{:keys [out level] :as opts}]]
+  (let [annotations (if (= :graphics level)
+                      (pe/extract-line-positions pdf-url)
+                      (->> (pe/extract-char-positions pdf-url)
+                           pd/text-positions->pages-of-tokens
+                           (mapcat #(parse-page % opts))))]
+    (a/annotate {:pdf-url pdf-url :output-directory (or out u/annotated-dir)} annotations)))
 
-#_(->> (str "866c354c846ed29c9d415dd6066aecd8" ".pdf")
-       (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/")
-       (#(annotate-em % {:level :tokens}))
+;assumes that batch-folder is in the pdf_parsing directory
+(defn annotate-batch [batch-folder & [level]]
+  (let [base-dir (str u/home-dir "/Documents/pdf_parsing/" batch-folder "/")]
+      (->> (str base-dir "raw")
+           u/get-pdfs-in-dir
+           (map #(do (println "processing: " %)
+                     (annotate-it % {:out (str base-dir (name level)) :level level})))
+           dorun)))
+
+#_(->> (str "0a0d474f5c51da7b3031cb4cc5d5a1db" ".pdf")
+       (str "file:" u/home-dir "/Documents/pdf_parsing/control_1/raw/")
+       (#(annotate-it % {:level :blocks}))
        (map #(dissoc % :tokens)))
 
-#_(let [base-dir (str u/home-dir "/Documents/pdf_parsing/control_2/")]
-    (->> (str base-dir "raw")
-         u/get-pdfs-in-dir
-         (map #(do (println "processing: " %)
-                   (annotate-em % {:out (str base-dir "blocks") :level :blocks})))
-         dorun))
+#_(annotate-batch "control_2" :blocks)
+#_(annotate-batch "blackrock" :segments)

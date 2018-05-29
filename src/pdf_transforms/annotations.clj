@@ -71,7 +71,7 @@
                (.add page-annotations
                      (-> box
                          (assoc :y0 y)
-                         (assoc :y1 (+ y (- y1 y0) 3.0))
+                         (assoc :y1 (+ y (- y1 y0) #_(if (zero? (- y1 y0)) 0.25 3.0)))
                          box->annotation)))))))
 
 (defn annotate [{:keys [pdf-url output-directory table-columns?
