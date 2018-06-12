@@ -49,7 +49,9 @@
   (let [filename (if (and (string? pdf-url) (re-matches #"file:/.*" pdf-url))
                    (last (s/split pdf-url (re-pattern File/separator)))
                    (str "annotated-" (rand-int 9999) ".pdf"))]
-    (if out-dir (File. (File. out-dir) filename) (File. filename))))
+    (if out-dir (let [dir (File. out-dir)]
+                   (.mkdirs dir) (File. dir filename))
+                (File. filename))))
 
 (defn box->annotation [{:keys [x0 x1 y0 y1 class type]}]
   (let [position (doto (PDRectangle.)
@@ -71,7 +73,7 @@
                (.add page-annotations
                      (-> box
                          (assoc :y0 y)
-                         (assoc :y1 (+ y (- y1 y0) #_(if (zero? (- y1 y0)) 0.25 3.0)))
+                         (assoc :y1 (+ y (max 0.25 (- y1 y0))))
                          box->annotation)))))))
 
 (defn annotate [{:keys [pdf-url output-directory table-columns?

@@ -9,7 +9,9 @@
             [pdf-transforms.utilities :as utils]
             [pdf-transforms.blocks.features :as f]
             [pdf-transforms.blocks.classify :as cls]
-            [pdf-transforms.components.core :as cmps]))
+            [pdf-transforms.components.core :as cmps]
+            [pdf-transforms.components.columnar :as col]
+            [clojure.set :as sets]))
 
 
 ;TODO better gap logic
@@ -34,6 +36,8 @@
 ;  (or (> ax bx) (horizontal-gap? a b) (utils/new-line? a b)))
 
 
+;TODO better column detection, and maybe include features on each page instead of just having a vector of segments/tokens
+;  {:keys [columns graphics tokens height width]}
 
 ;;;;;;;;;;;; SEGMENTS  ;;;;;;;;;;
 
@@ -52,12 +56,20 @@
              (> lvl 2) (cmps/->components page-of-tokens)
              (> lvl 2) (map #(dissoc % :class)))))
 
+(defn parse-features [page-of-tokens]
+  (->> page-of-tokens
+       utils/create-lines
+       (col/find-vertical-boundaries 4)))
+
 (defn annotate-it [pdf-url & [{:keys [out level] :as opts}]]
-  (let [annotations (if (= :graphics level)
-                      (pe/extract-line-positions pdf-url)
-                      (->> (pe/extract-char-positions pdf-url)
-                           pd/text-positions->pages-of-tokens
-                           (mapcat #(parse-page % opts))))]
+  (let [annotations (cond
+                      (= :graphics level) (pe/extract-line-positions pdf-url)
+                      (= :features level) (->> (pe/extract-char-positions pdf-url)
+                                               pd/text-positions->pages-of-tokens
+                                               (mapcat parse-features))
+                      :else (->> (pe/extract-char-positions pdf-url)
+                                 pd/text-positions->pages-of-tokens
+                                 (mapcat #(parse-page % opts))))]
     (a/annotate {:pdf-url pdf-url :output-directory (or out u/annotated-dir)} annotations)))
 
 ;assumes that batch-folder is in the pdf_parsing directory
@@ -69,6 +81,11 @@
                      (annotate-it % {:out (str base-dir (name level)) :level level})))
            dorun)))
 
+
+
+
+
+
 #_(->> (str "0a0d474f5c51da7b3031cb4cc5d5a1db" ".pdf")
        (str "file:" u/home-dir "/Documents/pdf_parsing/control_1/raw/")
        (#(annotate-it % {:level :blocks}))
@@ -76,3 +93,4 @@
 
 #_(annotate-batch "control_2" :blocks)
 #_(annotate-batch "blackrock" :segments)
+#_(annotate-batch "aig_1" :features)

@@ -51,12 +51,10 @@
 (defn extend-column
   ([column min-width lines] (extend-column column [] min-width lines))
   ([column columns min-width lines]
-    (if-let [line (first lines)]
-      (let [overlaps (white-column-overlaps column min-width line)]
-        (if (empty? overlaps)
-          (conj columns column)
-          (reduce concat columns (map #(extend-column (assoc column :x0 (apply min %) :x1 (apply max %) :y1 (:y (first line))) min-width (rest lines)) overlaps))))
-      (conj columns column))))
+   (or (when-let [line (first lines)]
+         (when-let [overlaps (not-empty (white-column-overlaps column min-width line))]
+           (reduce concat columns (map #(extend-column (assoc column :x0 (apply min %) :x1 (apply max %) :y1 (:y (first line))) min-width (rest lines)) overlaps))))
+       (conj columns column))))
 
 
 (defn columns-as-pixel-range [columns]
@@ -78,7 +76,7 @@
 
 ;N^2 algorithm, should only be used for one page at a time.  Could improve if need be...
 (defn- remove-redundants
-  "Remove boundaries that are merely seperating other boundaries"
+  "Remove boundaries that are merely separating other boundaries"
   [boundaries]
   (->> boundaries
        (map (fn [boundary] (filter #(trivial-extension-of? % boundary) boundaries)))
@@ -99,10 +97,14 @@
                                                     (filter (fn [{col-y :y1}] (>= col-y (:y (first line))))) ;ignore columns that ended on higher lines
                                                     columns-as-pixel-range)))
                           (group-consec-nums min-width)
-                          (map #(hash-map :x0 (apply min %) :x1 (apply max %) :y0 (apply min (map :y line)) :y1 (apply max (map :y line))))
+                          (map #(hash-map :x0 (apply min %)
+                                          :x1 (apply max %)
+                                          :y0 (apply min (map (fn [{:keys [y height]}] (- y height)) line))
+                                          :y1 (apply max (map :y line))
+                                          :page-number (some :page-number line)))
                           (map #(extend-column % min-width lines))
                           (reduce concat)
-                          (filter #(and (pos? (:x0 %)) (< (:x1 %) 1000)))))) ;remove the gutters
+                          (filter (fn [{:keys [x0 x1]}] (and (pos? x0) (< x1 1000))))))) ;remove the gutters
       columns)))
 
 
@@ -132,7 +134,7 @@
         (sort-by #(% 0))                                                      ;Order the boundaries so we go from left of page to right
         (map #(hash-map :x0 (first %)
                         :x1 (last %)
-                        :y0 (:y (first (first lines)))
+                        :y0 (:y (ffirst lines))
                         :y1 (:y (first (last lines))))))))    ;Return maps representing column boundaries (inclusive)
 
 
