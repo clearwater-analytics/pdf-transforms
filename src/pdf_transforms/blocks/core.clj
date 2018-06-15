@@ -58,9 +58,9 @@
                           (update :tokens #(concat % tokens)))))))
 
 
-(defn compose-blocks [page-of-segments]
+(defn compose-blocks [segments]
   (loop [blocks []
-         remaining page-of-segments]
+         remaining segments]
     (if-not (seq remaining)
       blocks
       (let [block (group-vertically (first remaining) (rest remaining) blocks)]

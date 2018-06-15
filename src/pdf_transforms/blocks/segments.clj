@@ -97,16 +97,9 @@
       ((juxt identity decorate))
       ((partial apply merge))))
 
-(defn compose-segments [page-of-tokens]
-  (->> page-of-tokens
+;TODO actually use graphics and features here
+(defn compose-segments [tokens & [graphics features]]
+  (->> tokens
        utils/create-lines
        (mapcat split-on-gaps)
        (map decorate-segment)))
-
-
-#_(defn compose-segments [page-of-tokens]
-  (->> page-of-tokens
-       (utils/partition-when new-segment?)
-       (map decorate-segment)))
-
-

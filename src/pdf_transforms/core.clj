@@ -22,7 +22,7 @@
 
 (defn pages-of-words [pdf-path & [page-bounds]]
   (->> page-bounds
-       (pe/extract-char-positions pdf-path)
+       (pe/extract-text-positions pdf-path)
        pd/text-positions->pages-of-tokens))
 
 
@@ -31,6 +31,7 @@
 
 (def formats [:tokens :segments :blocks :components])
 
+;TODO needs to change to match sandboxs parse-page
 (defn parse-page [page-of-tokens & [{:keys [format] :or {format :components}}]]
   (let [lvl (.indexOf formats format)]
     (cond->> page-of-tokens
@@ -85,6 +86,6 @@
 
 (defn annotate-graphics [^String pdf-url & [{:keys [output-directory]}]]
   (->> pdf-url
-       pe/extract-line-positions
+       pe/extract-graphics
        (ann/annotate {:pdf-url pdf-url :output-directory output-directory})
        dorun))

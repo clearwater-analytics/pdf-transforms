@@ -11,7 +11,10 @@
             [pdf-transforms.blocks.classify :as cls]
             [pdf-transforms.components.core :as cmps]
             [pdf-transforms.components.columnar :as col]
-            [clojure.set :as sets]))
+            [clojure.set :as sets]
+            [plumbing.core :refer [fnk]]
+            [plumbing.graph :as graph]
+            ))
 
 
 ;TODO better gap logic
@@ -41,36 +44,57 @@
 
 ;;;;;;;;;;;; SEGMENTS  ;;;;;;;;;;
 
-(def levels [:tokens :segments :blocks :components])
+(def levels [:tokens :segments :blocks])                    ;TODO add :components later
 
-(defn parse-page [page-of-tokens & [{:keys [level] :or {level :components}}]]
+;TODO can dissoc old keys (i.e. dissoc segments after blocks are made) later if needed
+#_(defn parse-page [page-of-tokens & [{:keys [level] :or {level :blocks}}]]
   (let [lvl (.indexOf levels level)
         token->ann-format (fn [{:keys [x width y height] :as token}]
-                            (assoc token :x0 x :x1 (+ x width) :y0 (- y height) :y1 y ))]
+                            (assoc token :x0 x :x1 (+ x width) :y0 (- y height) :y1 y ))
+        assc (fn [k fnc x] (assoc x k (fnc x)))]
     (cond->> page-of-tokens
-             (zero? lvl) (map token->ann-format)            ;just for the sake of annotating tokens
-             (> lvl 0) bs/compose-segments
-             (> lvl 1) bc/compose-blocks
+             (zero? lvl) (map token->ann-format)        ;just for the sake of annotating tokens
+             (> lvl 0) (assc :segments bs/compose-segments)
+             (> lvl 1) (assc :blocks bc/compose-blocks)
              (> lvl 1) f/enfeature-blocks
-             (> lvl 1) (map cls/add-class)
-             (> lvl 2) (cmps/->components page-of-tokens)
-             (> lvl 2) (map #(dissoc % :class)))))
+             (> lvl 1) cls/classify-blocks)))
 
-(defn parse-features [page-of-tokens]
-  (->> page-of-tokens
-       utils/create-lines
-       (col/find-vertical-boundaries 4)))
+;token->ann-format (fn [{:keys [x width y height] :as token}]
+;                    (assoc token :x0 x :x1 (+ x width) :y0 (- y height) :y1 y ))
 
+;white space dividers logic is really slow
+(def page-parser
+  {:tokens    (fnk [text-positions] (pd/page->token-stream text-positions))
+   :whitespace-dividers (fnk [tokens] (->> tokens utils/create-lines (col/find-vertical-boundaries 4))) ;still really slow
+   :segments  (fnk [tokens graphics whitespace-dividers]
+                (bs/compose-segments tokens graphics whitespace-dividers))
+   :blocks    (fnk [segments]
+                (bc/compose-blocks segments))})
+
+(def parse-page (graph/lazy-compile page-parser))
+
+(defn build-pages [pdf-url]
+  (let [text-pages (->> pdf-url
+                        pe/extract-text-positions
+                        (map (fn [{:keys [page-number x y] :as tp}]
+                               (assoc tp :id (str page-number "_" (int x) "_" (int y)))))
+                        (group-by :page-number)
+                        (sort-by key)
+                        (map (comp (partial array-map :text-positions) second)))]
+    (let [page->graphics (group-by :page-number (pe/extract-graphics pdf-url))]
+      (map #(assoc % :graphics (page->graphics (some :page-number (:text-positions %)))) text-pages))))
+
+;TODO can worry about ignoring graphics (for performance) later
 (defn annotate-it [pdf-url & [{:keys [out level] :as opts}]]
-  (let [annotations (cond
-                      (= :graphics level) (pe/extract-line-positions pdf-url)
-                      (= :features level) (->> (pe/extract-char-positions pdf-url)
-                                               pd/text-positions->pages-of-tokens
-                                               (mapcat parse-features))
-                      :else (->> (pe/extract-char-positions pdf-url)
-                                 pd/text-positions->pages-of-tokens
-                                 (mapcat #(parse-page % opts))))]
-    (a/annotate {:pdf-url pdf-url :output-directory (or out u/annotated-dir)} annotations)))
+  (a/annotate {:pdf-url pdf-url :output-directory (or out u/annotated-dir)}
+              (->> pdf-url
+                   build-pages
+                   (mapcat (fn [{:keys [graphics] :as pg}]
+                             (concat graphics (level (parse-page pg))))
+                           #_(comp level parse-page)
+                           ))))      ;comp level to get a flat seq of all the blocks or segments
+
+
 
 ;assumes that batch-folder is in the pdf_parsing directory
 (defn annotate-batch [batch-folder & [level]]
@@ -86,8 +110,8 @@
 
 
 
-#_(->> (str "0a0d474f5c51da7b3031cb4cc5d5a1db" ".pdf")
-       (str "file:" u/home-dir "/Documents/pdf_parsing/control_1/raw/")
+#_(->> (str "866c354c846ed29c9d415dd6066aecd8" ".pdf")
+       (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/")
        (#(annotate-it % {:level :blocks}))
        (map #(dissoc % :tokens)))
 

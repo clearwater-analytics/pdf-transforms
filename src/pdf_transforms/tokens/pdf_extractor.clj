@@ -100,7 +100,7 @@
        (map (fn [page-no] (let [page (.getPage pdf-doc page-no)
                                 stripper (in-memory-line-stripper page)]
                             (.processPage stripper page)
-                            (map #(assoc % :page-number (inc page-no)) (.getData stripper)))))
+                            (map #(assoc % :page-number (inc page-no) :class :graphic) (.getData stripper)))))
        flatten))
 
 (defn bookmark->map [^PDOutlineItem bookmark]
@@ -143,13 +143,22 @@
                      top-y (-> page .getCropBox .getUpperRightY)]
                  (keep #(assoc (pojo->edn % top-y) :page-number (inc page-no)) (.getAnnotations page)))))))
 
+(defn- page-characteristics [doc & _]
+  (for [page-no (range 0 (.getNumberOfPages doc))]
+    (let [^PDPage page (.getPage doc page-no)
+          crop-box (.getCropBox page)]
+      (as-> {:page-number (inc page-no) :y0 (.getLowerLeftY crop-box)  :x0 (.getLowerLeftX crop-box)
+             :y1         (.getUpperRightY crop-box)  :x1 (.getUpperRightX crop-box)} pg
+            (assoc pg :orientation (if (> (:x1 pg) (:y1 pg)) :landscape :portrait))))))
+
 ;; PUBLIC Functions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn process-pdf-document [process-fn is & pages]
   (with-open [doc (-> is io/input-stream RandomAccessBufferedFileInputStream. PDFParser. (doto (.parse)) .getPDDocument)]
     (apply process-fn (cons (preprocess-pdf doc) pages))))
 
-(def extract-char-positions (partial process-pdf-document build-position-data))
-(def extract-line-positions (partial process-pdf-document build-line-position-data))
+(def extract-text-positions (partial process-pdf-document build-position-data))
+(def extract-graphics (partial process-pdf-document build-line-position-data))
 (def extract-bookmarks (partial process-pdf-document get-bookmarks))
 (def extract-annotations (partial process-pdf-document get-annotations))
+(def extract-page-characteristics (partial process-pdf-document page-characteristics))

@@ -32,7 +32,8 @@
                    :labeled (pd-color :cyan)
                    :page-footer (pd-color :green)
                    :table-footer (pd-color :green)
-                   :paragraph (pd-color :blue)})
+                   :paragraph (pd-color :blue)
+                   :graphic (pd-color :green)})
 
 (def component-colors {:table  (pd-color :magenta)
                        :table-column (pd-color :magenta)
