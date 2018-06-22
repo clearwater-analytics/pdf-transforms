@@ -7,8 +7,8 @@
 (defn vertically-near? [{:keys [y1 font font-size height]}
                         {by0 :y0 b-font :font b-font-size :font-size b-height :height}]
   (< (- by0 y1) (* (if (and (= font b-font) (= font-size b-font-size))
-                     2.0
-                     1.0)
+                     0.75
+                     0.25)
                    (min height b-height))))
 
 

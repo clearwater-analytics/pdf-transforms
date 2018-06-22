@@ -41,8 +41,8 @@
                                                   :x           (.getXDirAdj text)
                                                   :y           (some-> (.getYDirAdj text) (* 100) float Math/round (/ 100.0))
                                                   :page-number (proxy-super getCurrentPageNo) ;expensive, could get 35 % speed increase by doing this some other way ...
-                                                  :font-size      (.getFontSizeInPt text)
-                                                  :height      (.getHeight text)
+                                                  :font-size   (.getFontSizeInPt text)
+                                                  :height      (.getFontSizeInPt text)
                                                   :width       (.getWidthDirAdj text)
                                                   :font        font-name}))))
             (proxy-super processTextPosition text)))
@@ -100,7 +100,7 @@
        (map (fn [page-no] (let [page (.getPage pdf-doc page-no)
                                 stripper (in-memory-line-stripper page)]
                             (.processPage stripper page)
-                            (map #(assoc % :page-number (inc page-no) :class :graphic) (.getData stripper)))))
+                            (map #(assoc % :page-number (inc page-no)) (.getData stripper)))))
        flatten))
 
 (defn bookmark->map [^PDOutlineItem bookmark]

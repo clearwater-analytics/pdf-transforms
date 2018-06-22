@@ -12,35 +12,15 @@
             [pdf-transforms.components.core :as cmps]
             [pdf-transforms.components.columnar :as col]
             [clojure.set :as sets]
+            [pdf-transforms.tokens.graphics :as g]
             [plumbing.core :refer [fnk]]
             [plumbing.graph :as graph]
             ))
 
 
-;TODO better gap logic
-; End of sentence
-;    bob." hello
-;    JON. SALLY
-;    today. Co-owner
-;    purposes. Any
-;    borrowers.  See,
-
-; Footnotes, superscripts, bullets, Itemized lines all need a larger gap threshold
-
-;Mid sentence gaps
-; yment related defaults, if mate financial difficulties; (iv) difficulties; (v) substitution of
-; Council; former Board member and past President Association of Counties; past President,
-;  Missouri-Columbia (B.S., Business
-
 
 ;TODO increase acceptable gap size for footnotes, bullets, (VI) xxx
 
-;(defn new-segment? [{ax :x :as a} {bx :x :as b}]
-;  (or (> ax bx) (horizontal-gap? a b) (utils/new-line? a b)))
-
-
-;TODO better column detection, and maybe include features on each page instead of just having a vector of segments/tokens
-;  {:keys [columns graphics tokens height width]}
 
 ;;;;;;;;;;;; SEGMENTS  ;;;;;;;;;;
 
@@ -65,34 +45,39 @@
 ;white space dividers logic is really slow
 (def page-parser
   {:tokens    (fnk [text-positions] (pd/page->token-stream text-positions))
-   :whitespace-dividers (fnk [tokens] (->> tokens utils/create-lines (col/find-vertical-boundaries 4))) ;still really slow
-   :segments  (fnk [tokens graphics whitespace-dividers]
-                (bs/compose-segments tokens graphics whitespace-dividers))
+   :visual-features (fnk [tokens] (->> tokens utils/create-lines
+                                       (col/intertext-boundaries 5)
+                                       (map #(assoc % :class :visual-feature :boundary-axis :x))))
+   :segments  (fnk [tokens graphics visual-features]
+                (bs/compose-segments tokens (concat visual-features graphics)))
    :blocks    (fnk [segments]
                 (bc/compose-blocks segments))})
 
 (def parse-page (graph/lazy-compile page-parser))
 
-(defn build-pages [pdf-url]
-  (let [text-pages (->> pdf-url
-                        pe/extract-text-positions
-                        (map (fn [{:keys [page-number x y] :as tp}]
-                               (assoc tp :id (str page-number "_" (int x) "_" (int y)))))
-                        (group-by :page-number)
-                        (sort-by key)
-                        (map (comp (partial array-map :text-positions) second)))]
-    (let [page->graphics (group-by :page-number (pe/extract-graphics pdf-url))]
-      (map #(assoc % :graphics (page->graphics (some :page-number (:text-positions %)))) text-pages))))
+(defn merge-graphics [pdf-url pages]
+  (let [page->graphics (try (->> (pe/extract-graphics pdf-url)
+                                 g/explode-graphics
+                                 (group-by :page-number))
+                            (catch Exception ex (println "Exception during graphics processing: " (.getMessage ex))))]
+    (map #(assoc % :graphics (get page->graphics (some :page-number (:text-positions %)) [])) pages)))
 
-;TODO can worry about ignoring graphics (for performance) later
+(defn build-pages [pdf-url]
+  (->> pdf-url
+       pe/extract-text-positions
+       (map (fn [{:keys [page-number x y] :as tp}]
+              (assoc tp :id (str page-number "_" (int x) "_" (int y)))))
+       (group-by :page-number)
+       (sort-by key)
+       (map (comp (partial array-map :text-positions) second))
+       (merge-graphics pdf-url)))
+
+
 (defn annotate-it [pdf-url & [{:keys [out level] :as opts}]]
   (a/annotate {:pdf-url pdf-url :output-directory (or out u/annotated-dir)}
               (->> pdf-url
                    build-pages
-                   (mapcat (fn [{:keys [graphics] :as pg}]
-                             (concat graphics (level (parse-page pg))))
-                           #_(comp level parse-page)
-                           ))))      ;comp level to get a flat seq of all the blocks or segments
+                   (mapcat (comp level parse-page)))))      ;comp level to get a flat seq of all the blocks or segments
 
 
 
@@ -106,15 +91,26 @@
            dorun)))
 
 
+(defn annotate-features [pdf-url & [out-dir]]
+  (let [graphics (->> pdf-url pe/extract-graphics g/explode-graphics)
+        features (->> pdf-url
+                      build-pages
+                      (mapcat (comp :visual-features parse-page)))]
+    (a/annotate {:pdf-url pdf-url :output-directory (or out-dir u/annotated-dir)}
+                (concat graphics features))))
+
+#_(->> (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/crammed_tables.pdf")
+       build-pages
+       (mapcat (comp :segments parse-page)))
 
 
+#_(->> (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/9615b1f2249a620601c476d88f63c5d5.pdf")
+       (#(annotate-it % {:level :segments}))
+       #_(map #(dissoc % :tokens)))
 
 
-#_(->> (str "866c354c846ed29c9d415dd6066aecd8" ".pdf")
-       (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/")
-       (#(annotate-it % {:level :blocks}))
-       (map #(dissoc % :tokens)))
-
-#_(annotate-batch "control_2" :blocks)
+#_(annotate-batch "control_2" :segments)
 #_(annotate-batch "blackrock" :segments)
 #_(annotate-batch "aig_1" :features)
+
+#_(annotate-features (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/deutsche_bank.pdf"))

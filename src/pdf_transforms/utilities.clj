@@ -53,8 +53,8 @@
 
 (defn new-line? [{prev-y :y p-ss? :superscript? ph :height} {y :y h :height}]
   (if p-ss?
-    (pos? (- y h prev-y ph))
-    (pos? (- y h prev-y))))
+    (> (- y h prev-y ph) -1)
+    (> (- y h prev-y) -1)))
 
 (defn asci-line? [{prev-y :y ph :height} {y :y h :height t :text}]
   (and (pos? (- y 1 prev-y))
