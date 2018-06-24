@@ -46,7 +46,7 @@
 (def page-parser
   {:tokens    (fnk [text-positions] (pd/page->token-stream text-positions))
    :visual-features (fnk [tokens] (->> tokens utils/create-lines
-                                       (col/intertext-boundaries 5)
+                                       (col/intertext-boundaries 4)
                                        (map #(assoc % :class :visual-feature :boundary-axis :x))))
    :segments  (fnk [tokens graphics visual-features]
                 (bs/compose-segments tokens (concat visual-features graphics)))
@@ -99,12 +99,12 @@
     (a/annotate {:pdf-url pdf-url :output-directory (or out-dir u/annotated-dir)}
                 (concat graphics features))))
 
-#_(->> (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/crammed_tables.pdf")
+#_(->> (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/deutsche_bank.pdf")
        build-pages
        (mapcat (comp :segments parse-page)))
 
 
-#_(->> (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/9615b1f2249a620601c476d88f63c5d5.pdf")
+#_(->> (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/deutsche_bank.pdf")
        (#(annotate-it % {:level :segments}))
        #_(map #(dissoc % :tokens)))
 

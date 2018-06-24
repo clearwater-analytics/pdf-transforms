@@ -23,7 +23,7 @@
        (filter (fn [[{:keys [x width]} {nxt-x :x}]]
                  (>= (- (int nxt-x) (Math/ceil (+ x width))) min-gap-width)))
        (map (fn [[{:keys [x width y height page-number]} {nxt-x :x}]]
-              {:x0 (int (+ x width)) :x1 (int nxt-x) :y0 (- y height) :y1 y :page-number page-number}))))
+              {:x0 (Math/ceil (+ x width)) :x1 (int nxt-x) :y0 (- y height) :y1 y :page-number page-number}))))
 
 
 (defn overlap-as-boundary [{ax0 :x0 ax1 :x1} {bx0 :x0 bx1 :x1}]

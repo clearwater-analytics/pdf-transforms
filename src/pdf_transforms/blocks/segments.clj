@@ -46,20 +46,14 @@
 (defn line-break? [{ellipsis-a? :ellipsis? :as a} {ellipsis-b? :ellipsis? :as b}]
   (or (horizontal-gap? a b) ellipsis-a? ellipsis-b?))
 
-(defn new-segment? [{ax :x :as a} {bx :x :as b}]
-  (or (> ax bx) (line-break? a b) (utils/new-line? a b)))
-
 ;TODO worry about efficiency later (maybe reduce the bounds as we walk through the page)
 ; by returns the new boundaries (input - everything above this token) and if there is a boundary to the right
-(defn boundary-to-right? [boundaries {:keys [x width y height]} {right-token-x :x}]
+(defn boundary-between? [boundaries {:keys [x width y height]} {right-token-x :x}]
   (some (fn [{:keys [x0 x1 y0 y1 boundary-axis]}]
           (and (= :x boundary-axis)                         ;The boundary separates along the x axis
-               (>= x0 (+ x width))                          ;bound starts after the end of the left token
-               (>= right-token-x x1)                        ;bound ends before the start of the right token
-               (or (and (> (- y1 3) y)                      ;bound ends well after token ends
-                        (> y y0))                           ;bound starts before the token ends
-                   (and (> (- y height 3) y0)               ;bound starts after the token begins
-                        (> y1 (- y height))))))                  ;bound ends after the token begins
+               (>= (inc x0) (+ x width))                          ;bound starts after the end of the left token (wiggle room of 1)
+               (>= (inc right-token-x) x1)                        ;bound ends before the start of the right token (wiggle room of 1)
+               (utils/between? (dec y) y0 y1)))                  ;bound is in horizontal alignment
         boundaries))
 
 (def segment-decor-graph
@@ -83,5 +77,5 @@
        (mapcat (partial utils/partition-when (fn [tkn-a tkn-b]
                                                (or
                                                  (line-break? tkn-a tkn-b)
-                                                 (boundary-to-right? visual-boundaries tkn-a tkn-b)))))
+                                                 (boundary-between? visual-boundaries tkn-a tkn-b)))))
        (map decorate-segment)))
