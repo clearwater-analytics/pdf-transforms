@@ -12,7 +12,8 @@
   (filter (partial in-box? box-coords) words))
 
 (defn relative-to
-  "position of second arg relative to the first"
+  "Returns the position of second box relative to the first box.  Result is a set that contains
+  those of the 4 directions are applicable to the relationship. The empty set means that the boxes overlap."
   [{:keys [x0 x1 y0 y1]}
    {sx0 :x0 sx1 :x1 sy0 :y0 sy1 :y1}]
   (cond-> #{}
@@ -20,6 +21,17 @@
           (> sy0 y1) (conj :below)
           (< sx1 x0) (conj :left)
           (> sx0 x1) (conj :right)))
+
+(defn forgiving-relative-to
+  "Returns the position of second box relative to the first box.  Result is a set that contains
+  those of the 4 directions are applicable to the relationship.  Padding of 1 is given on each border"
+  [{:keys [x0 x1 y0 y1]}
+   {sx0 :x0 sx1 :x1 sy0 :y0 sy1 :y1}]
+  (cond-> #{}
+          (< sy1 (inc y0)) (conj :above)
+          (> sy0 (dec y1)) (conj :below)
+          (< sx1 (inc x0)) (conj :left)
+          (> sx0 (dec x1)) (conj :right)))
 
 (defn within?
   "Is the second box within the first?"

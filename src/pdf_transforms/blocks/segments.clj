@@ -58,9 +58,7 @@
 
 (def segment-decor-graph
   {:text                 (fnk [tokens] (s/join " " (map :text tokens)))
-   :height               (fnk [y0 y1] (- y1 y0))
-   :font                 (fnk [tokens] (->> tokens (map (comp font-clean :font)) frequencies (apply max-key second) first))
-   :font-size            (fnk [tokens] (->> tokens (map :font-size) frequencies (apply max-key second) first))})
+   :height               (fnk [y0 y1] (- y1 y0))})
 
 (def decorate (graph/compile segment-decor-graph))
 

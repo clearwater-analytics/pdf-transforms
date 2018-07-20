@@ -4,14 +4,9 @@
             [pdf-transforms.blocks.core :as bc]
             [pdf-transforms.blocks.segments :as bs]
             [pdf-transforms.annotations :as a]
-            [pdf-transforms.core :as core]
             [sandbox.utils :as u]
             [pdf-transforms.utilities :as utils]
-            [pdf-transforms.blocks.features :as f]
-            [pdf-transforms.blocks.classify :as cls]
-            [pdf-transforms.components.core :as cmps]
             [pdf-transforms.components.columnar :as col]
-            [clojure.set :as sets]
             [pdf-transforms.tokens.graphics :as g]
             [plumbing.core :refer [fnk]]
             [plumbing.graph :as graph]
@@ -26,32 +21,17 @@
 
 (def levels [:tokens :segments :blocks])                    ;TODO add :components later
 
-;TODO can dissoc old keys (i.e. dissoc segments after blocks are made) later if needed
-#_(defn parse-page [page-of-tokens & [{:keys [level] :or {level :blocks}}]]
-  (let [lvl (.indexOf levels level)
-        token->ann-format (fn [{:keys [x width y height] :as token}]
-                            (assoc token :x0 x :x1 (+ x width) :y0 (- y height) :y1 y ))
-        assc (fn [k fnc x] (assoc x k (fnc x)))]
-    (cond->> page-of-tokens
-             (zero? lvl) (map token->ann-format)        ;just for the sake of annotating tokens
-             (> lvl 0) (assc :segments bs/compose-segments)
-             (> lvl 1) (assc :blocks bc/compose-blocks)
-             (> lvl 1) f/enfeature-blocks
-             (> lvl 1) cls/classify-blocks)))
-
 ;token->ann-format (fn [{:keys [x width y height] :as token}]
 ;                    (assoc token :x0 x :x1 (+ x width) :y0 (- y height) :y1 y ))
 
 ;white space dividers logic is really slow
 (def page-parser
-  {:tokens    (fnk [text-positions] (pd/page->token-stream text-positions))
+  {:tokens          (fnk [text-positions] (->> text-positions pd/page->token-stream (remove :ellipsis?)))
    :visual-features (fnk [tokens] (->> tokens utils/create-lines
                                        (col/intertext-boundaries 4)
                                        (map #(assoc % :class :visual-feature :boundary-axis :x))))
-   :segments  (fnk [tokens graphics visual-features]
-                (bs/compose-segments tokens (concat visual-features graphics)))
-   :blocks    (fnk [segments]
-                (bc/compose-blocks segments))})
+   :segments        (fnk [tokens graphics visual-features] (bs/compose-segments tokens (concat visual-features graphics)))
+   :blocks          (fnk [segments graphics] (bc/compose-blocks segments graphics))})
 
 (def parse-page (graph/lazy-compile page-parser))
 
@@ -104,13 +84,14 @@
        (mapcat (comp :segments parse-page)))
 
 
-#_(->> (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/deutsche_bank.pdf")
-       (#(annotate-it % {:level :segments}))
+#_(->> (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/repeat_tbl_with_groups.pdf")
+       (#(annotate-it % {:level :blocks}))
        #_(map #(dissoc % :tokens)))
 
 
-#_(annotate-batch "control_2" :segments)
-#_(annotate-batch "blackrock" :segments)
+#_(annotate-batch "control_1" :segments)
+#_(annotate-batch "control_2" :blocks)
+#_(annotate-batch "blackrock" :blocks)
 #_(annotate-batch "aig_1" :features)
 
-#_(annotate-features (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/deutsche_bank.pdf"))
+#_(annotate-features (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/54811A4J9.pdf"))
