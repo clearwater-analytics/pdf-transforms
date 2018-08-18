@@ -10,13 +10,13 @@
 (def header-like #".*[a-zA-Z]{2,}.*[^.!?]\s*[\"\'\)]?")
 
 
-(defn label? [{{:keys [num-tokens
-                       num-lines]} :features
-               tokens             :tokens}]
+(defn label? [{:keys [tokens x1 y1]
+               {:keys [num-tokens neighbors-right neighbors-below]} :features}]
   (and
     (pos? num-tokens)
     (< num-tokens 20)
-    ;(< (/ num-tokens num-lines) 8)
+    (or (some-> neighbors-right first (#(< (- (:x0 %) x1) 200)))
+        (some-> neighbors-below first (#(< (- (:y0 %) y1) 50))))
     (re-matches header-like (s/join " " (map :text tokens)))))
 
 (defn page-footer? [{{:keys [num-components-below
@@ -33,23 +33,13 @@
       superscript-start?
       (re-matches footnote as-text))))                      ;lines starts with what should be a superscript
 
-(defn key? [{{:keys [keyword-start? num-components-right]} :features :as blk}]
+(defn key? [{{:keys [keyword-start? neighbors-right
+                     bold-ratio italic-ratio]} :features :as blk}]
   (and (label? blk)
-       keyword-start?
-       (pos? num-components-right)))
-
-#_(defn data-heavy-sentence? [{{:keys [ends-with-period? num-datapoints
-                                    num-lines num-english-words]} :features}]
-  (and (not ends-with-period?)
-       (> num-datapoints 1)
-       (= 1 num-lines)
-       (> num-english-words 1)))
-
-(defn paragraph? [{{:keys [ends-with-period? num-tokens
-                          num-lines num-english-words]} :features}]
-  (and ends-with-period?
-       (> num-lines 1)
-       (> (/ num-english-words num-tokens) 0.8)))
+       (or (and keyword-start? (seq neighbors-right))
+           (and (or (== 1 bold-ratio) (== 1 italic-ratio))
+                (some-> neighbors-right first (#(and (< (:bold-ratio %) 1)
+                                                     (< (:italic-ratio %) 1))))))))
 
 (defn key-column? [{{:keys [num-components-right keyword-start?
                              num-lines]} :features
@@ -79,18 +69,20 @@
    [:table-cell          #(and (table-column? %) (= 1 (get-in % [:features :num-lines])))]
    [:table-column        table-column?]
    [:column-n-header     cmn/data-and-labels?]
-   [:label               label?]
+   ;[:label               label?] ;TODO probably need to update the table detection logic to account for this
+   [:text                (fn [{{:keys [num-english-words num-datapoints]} :features}]
+                           (and (pos? num-english-words) (> num-english-words num-datapoints)))]
    [:page-footer         page-footer?]
    [:table-footer        table-footer?]
    [:paragraph           #(pos? (get-in % [:features :num-sentences]))]])
 
 
 (defn classify [block]
-  (some
-    (fn [[class instance-of-class?]] (when (instance-of-class? block) class))
-    class->rules))
+  (keep (fn [[class instance-of-class?]] (when (instance-of-class? block) class)) class->rules))
 
 ;convenience function
 (defn add-class [block]
-  (assoc block :class (classify block)))
+  (let [classes (classify block)]
+    (assoc block :class (first classes)
+                 :classes classes)))
 

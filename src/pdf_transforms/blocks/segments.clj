@@ -15,6 +15,7 @@
 (def word-rgx #"(?:(?:[a-zA-Z]*[aeiou][a-z]*)|(?:[aiouAIOU][a-z]?))\,?\.?")
 (def loose-word-rgx #"\S?[a-zA-Z]*[aeiouAEIOU][a-zA-Z]*\S?")
 (def font-noise #"[A-Z]+[+]|[Ii][Tt][Aa][Ll][iI][cC][sS]?|[=,-.]")
+(def footnote #"(?:[*+†]|\(\d{1,2}\))")
 
 
 (defn font-clean [font]
@@ -43,8 +44,12 @@
               (/ w1 (max 1 (count t1)))))))
 
 
-(defn line-break? [{ellipsis-a? :ellipsis? :as a} {ellipsis-b? :ellipsis? :as b}]
-  (or (horizontal-gap? a b) ellipsis-a? ellipsis-b?))
+(defn line-break? [{fsize1 :font-size ss1 :superscript? :as a}
+                   {fsize2 :font-size ss2 :superscript? :as b}]
+  (or (horizontal-gap? a b)
+      (and
+        (not (or ss1 ss2))
+        (< (/ (min fsize1 fsize2) (max fsize1 fsize2)) 0.75))))
 
 ;TODO worry about efficiency later (maybe reduce the bounds as we walk through the page)
 ; by returns the new boundaries (input - everything above this token) and if there is a boundary to the right
@@ -56,9 +61,23 @@
                (utils/between? (dec y) y0 y1)))                  ;bound is in horizontal alignment
         boundaries))
 
+(def word-rgx #"[^\d]*[aeiouyAEIOUY]+[^\d]*")
+
 (def segment-decor-graph
-  {:text                 (fnk [tokens] (s/join " " (map :text tokens)))
-   :height               (fnk [y0 y1] (- y1 y0))})
+  {:text-seq          (fnk [tokens] (map :text tokens))
+   :text              (fnk [text-seq] (s/join " " text-seq))
+   :height            (fnk [y0 y1] (- y1 y0))
+   :punctuation-cnt   (fnk [text] (count (re-seq #"[;!.,?'\"]" text)))
+   :numeric-cnt       (fnk [text-seq] (count (filter (partial re-find #"\d") text-seq)))
+   :all-caps-cnt      (fnk [text] (count (re-seq #"[A-Z]{2,}" text)))
+   :word-cnt          (fnk [text-seq] (count (filter (partial re-matches word-rgx) text-seq)))
+   :token-cnt         (fnk [tokens] (count tokens))
+   :delimiter-ending? (fnk [text-seq] (boolean (re-matches #".*:\s*" (last text-seq))))
+   :class             (fnk [numeric-cnt word-cnt]
+                        (cond
+                          (and (> word-cnt numeric-cnt) (pos? word-cnt)) :text
+                          (pos? numeric-cnt) :data))
+   })
 
 (def decorate (graph/compile segment-decor-graph))
 
@@ -71,9 +90,9 @@
 
 (defn compose-segments [tokens & [visual-boundaries]]
   (->> tokens
-       utils/create-lines
-       (mapcat (partial utils/partition-when (fn [tkn-a tkn-b]
-                                               (or
-                                                 (line-break? tkn-a tkn-b)
-                                                 (boundary-between? visual-boundaries tkn-a tkn-b)))))
+       (utils/partition-when (fn [{ax :x :as tkn-a} {bx :x :as tkn-b}]
+                               (or (> ax bx)
+                                   (utils/new-line? tkn-a tkn-b)
+                                   (line-break? tkn-a tkn-b)
+                                   (boundary-between? visual-boundaries tkn-a tkn-b))))
        (map decorate-segment)))

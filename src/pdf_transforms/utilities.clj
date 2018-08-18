@@ -51,10 +51,12 @@
 (defn within-x? [x a b]
   (<= (Math/abs (- a b)) x))
 
-(defn new-line? [{prev-y :y p-ss? :superscript? ph :height} {y :y h :height}]
-  (if p-ss?
-    (> (- y h prev-y ph) -1)
-    (> (- y h prev-y) -1)))
+(defn new-line? [{prev-y :y px :x pw :width p-ss? :superscript? ph :height}
+                 {y :y x :x ss? :superscript? h :height}]
+  (cond
+    p-ss? (> (- y h prev-y ph) -1)
+    (and ss? (< (- x (+ px pw)) 3)) (not (between? y (- prev-y ph) prev-y))
+    :else (> (- y h prev-y) -1)))
 
 (defn asci-line? [{prev-y :y ph :height} {y :y h :height t :text}]
   (and (pos? (- y 1 prev-y))

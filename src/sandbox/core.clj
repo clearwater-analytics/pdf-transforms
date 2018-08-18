@@ -10,28 +10,67 @@
             [pdf-transforms.tokens.graphics :as g]
             [plumbing.core :refer [fnk]]
             [plumbing.graph :as graph]
-            ))
+            [pdf-transforms.blocks.features :as f]
+            [pdf-transforms.blocks.classify :as cl]
+            [pdf-transforms.common :as cmn]
+            [pdf-transforms.components.core :as cmps]
+            [clojure.string :as s]))
+
+
+;;;;;;;;;;;;;    COMPONENTS    ;;;;;;;;;;;;;;;
+
+;each method can take in {:keys [blocks components]} and return the same data structure
+
+(defn labelish? [all-segments {:keys [delimiter-ending? class text x1 tokens] :as segment}]
+  (or
+    (let [[label & data] (s/split text #":")]
+      (and
+        (seq data)
+        (re-matches #"[^\d]+" label)
+        (seq (take-while #(or (:bold %) (:italic %)) tokens))))
+    (and delimiter-ending? (re-find #"[a-zA-Z]" text) (some #(= #{:right} (cmn/relative-to segment %)) all-segments))
+    (and
+      (= class :text)
+      (->> all-segments
+           (filter (fn [{:keys [x0 ellipsis?] bclass :class btokens :tokens :as seg}]                 ;something close by on the right and vertically aligned
+                     (and (= #{:right} (cmn/relative-to segment seg)) ;to the right
+                          (< (- x0 x1) 200)          ;close by
+                          (or
+                            (= :data bclass) ;data point on the right
+                            ellipsis?
+                            (and
+                              (or
+                                (every? :bold tokens)
+                                (every? :italic tokens))
+                              (not (or
+                                     (every? :bold btokens)
+                                     (every? :italic btokens))))))))
+           seq))))
 
 
 
-;TODO increase acceptable gap size for footnotes, bullets, (VI) xxx
+;;;; Parsin' ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn token->ann-format [{:keys [x width y height] :as token}]
+  (assoc token :x0 x :x1 (+ x width) :y0 (- y height) :y1 y))
 
 
-;;;;;;;;;;;; SEGMENTS  ;;;;;;;;;;
-
-(def levels [:tokens :segments :blocks])                    ;TODO add :components later
-
-;token->ann-format (fn [{:keys [x width y height] :as token}]
-;                    (assoc token :x0 x :x1 (+ x width) :y0 (- y height) :y1 y ))
-
-;white space dividers logic is really slow
 (def page-parser
-  {:tokens          (fnk [text-positions] (->> text-positions pd/page->token-stream (remove :ellipsis?)))
+  {:tokens          (fnk [text-positions] (pd/page->token-stream text-positions))
    :visual-features (fnk [tokens] (->> tokens utils/create-lines
                                        (col/intertext-boundaries 4)
                                        (map #(assoc % :class :visual-feature :boundary-axis :x))))
    :segments        (fnk [tokens graphics visual-features] (bs/compose-segments tokens (concat visual-features graphics)))
-   :blocks          (fnk [segments graphics] (bc/compose-blocks segments graphics))})
+   :blocks          (fnk [segments graphics]
+                      (->> (bc/compose-blocks segments graphics)
+                           f/enfeature-blocks
+                           (map cl/add-class)))
+   :experimental     (fnk [segments]
+                         segments                              ;this is just a filler
+
+                      )
+   :components      (fnk [tokens blocks]
+                      (cmps/->components tokens blocks))})
 
 (def parse-page (graph/lazy-compile page-parser))
 
@@ -79,19 +118,52 @@
     (a/annotate {:pdf-url pdf-url :output-directory (or out-dir u/annotated-dir)}
                 (concat graphics features))))
 
-#_(->> (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/deutsche_bank.pdf")
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;    Repl snippets
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(comment
+
+  (annotate-batch "control_1" :segments)
+  (annotate-batch "control_2" :segments)
+  (annotate-batch "control_2" :blocks)
+  (annotate-batch "blackrock" :segments)
+  (annotate-batch "blackrock" :blocks)
+  (annotate-batch "aig_1" :features)
+
+  ;annotate tokens example
+  (let [pdf (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/a150c74d7a9d72d4c69ad8a3f5084fcf.pdf")]
+    (->> pdf
+         build-pages
+         (mapcat (comp :tokens parse-page))
+         (map (comp #_#(assoc % :class (when (re-matches #"[^\d]*[aeiouyAEIOUY]+[^\d]*" (:text %)) :paragraph)) token->ann-format))
+         (a/annotate {:pdf-url pdf :output-directory u/annotated-dir})
+         dorun))
+
+  ;annotate lines
+  (let [pdf (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/edgar.pdf")]
+    (->> pdf
+         build-pages
+         (mapcat (comp :lines parse-page))
+         (a/annotate {:pdf-url pdf :output-directory u/annotated-dir})
+         dorun))
+
+  ;parse segments
+  (->> (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/866c354c846ed29c9d415dd6066aecd8.pdf")
        build-pages
-       (mapcat (comp :segments parse-page)))
+       (mapcat (comp :segments parse-page))
+       (take 10)
+       )
 
 
-#_(->> (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/repeat_tbl_with_groups.pdf")
-       (#(annotate-it % {:level :blocks}))
-       #_(map #(dissoc % :tokens)))
+  #_(->> (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/repeat_tbl_with_groups.pdf")
+         (#(annotate-it % {:level :blocks}))
+         (map (comp #(dissoc % :tokens) #(assoc % :text (s/join " " (map :text (:tokens %)))))))
+
+  #_(annotate-features (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/S2_trust.pdf"))
 
 
-#_(annotate-batch "control_1" :segments)
-#_(annotate-batch "control_2" :blocks)
-#_(annotate-batch "blackrock" :blocks)
-#_(annotate-batch "aig_1" :features)
 
-#_(annotate-features (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/54811A4J9.pdf"))
+
+  )

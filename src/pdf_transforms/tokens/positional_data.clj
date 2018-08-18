@@ -21,7 +21,8 @@
                   {:keys [x y font-size]}]
   (and
     ;(= font-size0 font-size)
-    (<= (dec (Math/abs (- x (+ w0 x0)))) (or cg 0))
+    (<= (- x (+ w0 x0) 1) (or cg 0))
+    (> x x0)
     (< (Math/abs (- y0 y)) 4)))
 
 ;is the superscript on the right of the modified term
@@ -55,54 +56,26 @@
 
 (def whitespace #"\s*")
 
-(defn build-tokens [characters]
+(defn build-tokens [chars]
   (reduce (fn [words {:keys [x width text] :as char}]
-            (let [{wx :x wt :text cg :char-gap ellipsis :ellipsis wwidth :width :as word} (peek words)]
+            (let [{wx :x wt :text cg :char-gap wwidth :width :as word} (peek words)]
               (cond
                 (or (duplicate-char? word char)
                     (re-matches whitespace text)) words
-                (and ellipsis
-                     (or
-                       (utils/new-line? word char)
-                       (not (re-matches #"\.+" text)))) (cond-> (pop words)
-                                                                (seq wt) (conj (dissoc word :ellipsis))
-                                                                true (conj ellipsis char))
                 (super-scripted-right? word char) (conj words (assoc char :superscript? true))
                 (super-scripted-left? words char) (conj (pop words)
                                                         (assoc word :superscript? true)
                                                         char)
                 (super-script? word char) (conj words char)
                 (same-word? word char) (conj (pop words)
-                                             (cond
-                                               ellipsis (-> word
-                                                            (update-in [:ellipsis :width] (partial + width))
-                                                            (update-in [:ellipsis :text] #(str % "."))) ;we know from other cond that char is a .
-                                               (and (s/ends-with? wt ".")
-                                                    (re-matches #"\.+" text)) (assoc word :ellipsis (assoc char :ellipsis? true
-                                                                                                                :width (* 2.0 width) ;we know the current char is a dot, so use its width as the standard dot width
-                                                                                                                :x (- x width)
-                                                                                                                :text "..")
-                                                                                          :text (subs wt 0 (dec (count wt)))
-                                                                                          :width (- wwidth width))
-                                               :else (assoc word :width (- (+ x width) wx)
-                                                                 :char-gap (/ (+ (or cg 0) (Math/abs (- x (+ wx wwidth))))
-                                                                              (if (<= (count (:text word)) 2) 1 2))
-                                                                 :text (str wt text))))
-                ellipsis (conj (pop words) (-> word         ;due to (ellipsis and NOT dot) condition above, IF ellipsis THEN dot
-                                               (update :ellipsis #(assoc % :width (- (+ x width) (:x %))))
-                                               (update-in [:ellipsis :text] #(str % "."))))
-                (and (re-matches #".*\." wt)                  ;not part of the same word, but still dots
-                     (= text ".")
-                     (not (utils/new-line? word char)))
-                (conj (pop words) (assoc word :ellipsis (assoc char :ellipsis? true
-                                                                    :width (* 2.0 width) ;we know the current char is a dot, so use its width as the standard dot width
-                                                                    :x (- x width)
-                                                                    :text "..")
-                                              :text (subs wt 0 (dec (count wt)))
-                                              :width (- wwidth width)))
+                                             (assoc word :width (- (+ x width) wx)
+                                                         :char-gap (/ (+ (or cg 0) (Math/abs (- x (+ wx wwidth))))
+                                                                      (if (<= (count (:text word)) 2) 1 2))
+                                                         :text (str wt text)))
                 :else (conj words char))))
-          [(first characters)]
-          (rest characters)))
+          [(first chars)]
+          (rest chars)))
+
 
 (defn page->token-stream [page]
   (->> page

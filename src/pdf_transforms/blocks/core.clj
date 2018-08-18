@@ -5,14 +5,24 @@
             [pdf-transforms.common :as cmn]
             [clojure.set :as s]))
 
-(defn vertically-near? [{:keys [y1 height tokens]}
-                        {by0 :y0 b-height :height b-tokens :tokens}]
-  (< (- by0 y1) (* (if (and (seq (s/intersection (set (map :font tokens)) (set (map :font b-tokens))))
-                            (seq (s/intersection (set (map :font-size tokens)) (set (map :font-size b-tokens)))))
-                     0.75
-                     0.25)
-                   (min height b-height))))
+(defn vertically-near? [{:keys [y1 height]}
+                        {by0 :y0 b-height :height}]
+  (< (- by0 y1) (* 0.75 (min height b-height))))
 
+
+(defn centered? [page-x0 page-x1 {:keys [x0 x1] :as seg}]
+  (and (> x0 (+ 50 page-x0))                                ;not just left aligned and spanning entire page
+       (utils/within-x? 10 (/ (+ x0 x1) 2.0) (/ (+ page-x0 page-x1) 2.0))))
+
+
+(defn weird-change? [{page-x0 :x0 page-x1 :x1} {:keys [tokens x0] :as seg1} {bx0 :x0 b-tokens :tokens :as seg2}]
+  (or
+    (and (centered? page-x0 page-x1 seg1) (not (centered? page-x0 page-x1 seg2)) (not (utils/within-x? 20 x0 bx0)))
+    (not (and (seq (s/intersection (set (map :font tokens)) (set (map :font b-tokens))))
+              (seq (s/intersection (set (map :font-size tokens)) (set (map :font-size b-tokens))))))))
+
+
+;TODO account for underlined word in the middle of sentences ....
 (defn y-boundary-between? [graphics {ay1 :y1 ax0 :x0 ax1 :x1} {by0 :y0}]
   (some
     (fn [{:keys [x0 x1 y0 y1 boundary-axis]}]
@@ -22,12 +32,12 @@
            (>= (- (min ax1 x1) (max ax0 x0)) 4.0)))                              ;sufficient overlap in horizontal direction
     graphics))
 
-
-(defn filter-candidates [segment other-segments graphics blocks]
+(defn filter-candidates [segment other-segments page-dimensions graphics blocks]
   (:candidates
     (reduce (fn [{:keys [candidates] :as box} seg]
               (if (and (= #{:below} (cmn/forgiving-relative-to box seg))
                        (vertically-near? (last candidates) seg)
+                       (not (weird-change? page-dimensions (last candidates) seg))
                        (not (y-boundary-between? graphics box seg)))
 
                 ;now check if adding this segment would lead to merge side-by-side segments
@@ -42,10 +52,10 @@
             other-segments)))
 
 
-(defn group-vertically [segment other-segments other-blocks graphics]
+(defn group-vertically [segment other-segments other-blocks graphics page-dimensions]
   (let [calc-diff #(- (:y0 (second %)) (:y1 (first %)))
         pairs (->> other-blocks
-                   (filter-candidates segment other-segments graphics)
+                   (filter-candidates segment other-segments page-dimensions graphics)
                    (partition 2 1))]
     (case (count pairs)
       0 [segment]
@@ -55,7 +65,7 @@
                           (cond
                             (< diff 0.001)                  ;deal with division by 0
                             {:last-diff diff :block (conj block (second pair))}
-                            (< (Math/abs (- 1.0 (/ last-diff diff))) 0.3)
+                            (< (Math/abs (- 1.0 (/ last-diff diff))) 0.5)
                             {:last-diff diff :block (conj block (second pair))}
                             (> diff last-diff)
                             (reduced {:block block})
@@ -75,9 +85,11 @@
 
 
 (defn compose-blocks [segments graphics]
-  (loop [blocks []
-         remaining segments]
-    (if-not (seq remaining)
-      blocks
-      (let [block (group-vertically (first remaining) (rest remaining) blocks graphics)]
-        (recur (conj blocks (format-block block)) (remove (into #{} block) remaining))))))
+  (let [page-dimensions {:x0 (apply min (map :x0 segments))
+                         :x1 (apply max (map :x1 segments))}]
+    (loop [blocks []
+           remaining segments]
+      (if-not (seq remaining)
+        blocks
+        (let [block (group-vertically (first remaining) (rest remaining) blocks graphics page-dimensions)]
+          (recur (conj blocks (format-block block)) (remove (into #{} block) remaining)))))))

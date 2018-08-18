@@ -17,7 +17,6 @@
 (s/def ::bold? boolean?)
 (s/def ::italic? boolean?)
 (s/def ::superscript? boolean?)
-(s/def ::ellipsis? boolean?)
 (s/def ::font-size number?)
 (s/def ::x coordinate?)
 (s/def ::y coordinate?)
@@ -40,7 +39,7 @@
 
 (s/def ::token
   (s/keys :req-un [::text ::font-size ::id ::height ::width ::x ::y ::page-number]
-          :opt-un [::bold? ::italic? ::superscript? ::ellipsis?]))
+          :opt-un [::bold? ::italic? ::superscript?]))
 
 (s/def ::tokens (s/coll-of ::raw-token))
 
