@@ -22,14 +22,14 @@
               (seq (s/intersection (set (map :font-size tokens)) (set (map :font-size b-tokens))))))))
 
 
-;TODO account for underlined word in the middle of sentences ....
-(defn y-boundary-between? [graphics {ay1 :y1 ax0 :x0 ax1 :x1} {by0 :y0}]
+(defn y-boundary-between? [graphics {ay1 :y1 ax0 :x0 ax1 :x1 toks :tokens} {by0 :y0}]
   (some
     (fn [{:keys [x0 x1 y0 y1 boundary-axis]}]
       (and (= :y boundary-axis)                   ;boundary separates along the y axis
            (>= (inc y0) ay1)                      ;boundary is below top segment
            (>= (inc by0) y1)                      ;boundary is above bottom segment
-           (>= (- (min ax1 x1) (max ax0 x0)) 4.0)))                              ;sufficient overlap in horizontal direction
+           (>= (- (min ax1 x1) (max ax0 x0)) 4.0) ;sufficient overlap in horizontal direction
+           (> (/ (- x1 x0) (- ax1 ax0)) 0.5)))      ;boundary is large relative to the segment (so as to ignore underlined words in sentences)
     graphics))
 
 (defn filter-candidates [segment other-segments page-dimensions graphics blocks]
@@ -38,7 +38,7 @@
               (if (and (= #{:below} (cmn/forgiving-relative-to box seg))
                        (vertically-near? (last candidates) seg)
                        (not (weird-change? page-dimensions (last candidates) seg))
-                       (not (y-boundary-between? graphics box seg)))
+                       (not (y-boundary-between? graphics (last candidates) seg)))
 
                 ;now check if adding this segment would lead to merge side-by-side segments
                 (let [{cands :candidates :as hypothesis} (-> box (utils/expand-bounds seg) (update :candidates conj seg))]
@@ -63,7 +63,7 @@
       (:block (reduce (fn [{:keys [last-diff block]} pair]  ;group by magnitude of separation
                         (let [diff (calc-diff pair)]
                           (cond
-                            (< diff 0.001)                  ;deal with division by 0
+                            (< diff 0.5)                  ;deal with division by 0
                             {:last-diff diff :block (conj block (second pair))}
                             (< (Math/abs (- 1.0 (/ last-diff diff))) 0.5)
                             {:last-diff diff :block (conj block (second pair))}

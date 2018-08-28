@@ -42,9 +42,9 @@
                                                   :y           (some-> (.getYDirAdj text) (* 100) float Math/round (/ 100.0))
                                                   :page-number (proxy-super getCurrentPageNo) ;expensive, could get 35 % speed increase by doing this some other way ...
                                                   :font-size   (.getFontSizeInPt text)
-                                                  :height      (.getFontSizeInPt text)
+                                                  :height      (.getXScale text)
                                                   :width       (.getWidthDirAdj text)
-                                                  :font        font-name}))))
+                                                  :font        (or font-name "unknown")}))))
             (proxy-super processTextPosition text)))
       (getData ([] @position-data)))))
 

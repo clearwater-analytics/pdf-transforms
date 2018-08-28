@@ -32,7 +32,7 @@
                    :page-footer (pd-color :green)
                    :table-footer (pd-color :green)
                    :paragraph (pd-color :blue)
-                   :text (pd-color :blue)
+                   :text (pd-color :cyan)
                    :graphic (pd-color :green)
                    :visual-feature (pd-color :cyan)})
 

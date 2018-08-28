@@ -7,9 +7,13 @@
             [pdf-transforms.utilities :as utils]
             [pdf-transforms.annotations :as ann]
             [pdf-transforms.blocks.features :as f]
-            [pdf-transforms.blocks.classify :as cls]
             [pdf-transforms.blocks.segments :as bs]
-            [pdf-transforms.blocks.core :as bc])
+            [pdf-transforms.blocks.core :as bc]
+            [plumbing.core :refer [fnk]]
+            [plumbing.graph :as graph]
+            [pdf-transforms.blocks.classify :as cl]
+            [pdf-transforms.components.columnar :as col]
+            [pdf-transforms.tokens.graphics :as g])
   (:import (org.apache.pdfbox.text PDFTextStripper)))
 
 (def pdf->text
@@ -29,18 +33,40 @@
 (defn- pdf->pages-of-lines [pdf-path & [page-bounds]]
   (map utils/create-lines (pages-of-words pdf-path page-bounds)))
 
-(def formats [:tokens :segments :blocks :components])
 
-;TODO needs to change to match sandboxs parse-page
-(defn parse-page [page-of-tokens & [{:keys [format] :or {format :components}}]]
-  (let [lvl (.indexOf formats format)]
-    (cond->> page-of-tokens
-             (> lvl 0) bs/compose-segments
-             (> lvl 1) bc/compose-blocks
-             (> lvl 2) f/enfeature-blocks
-             (> lvl 2) (map cls/add-class)
-             (> lvl 2) (cmps/->components page-of-tokens)
-             (> lvl 2) (map #(dissoc % :class)))))
+(def page-parser
+  {:tokens          (fnk [text-positions] (pd/page->token-stream text-positions))
+   :visual-features (fnk [tokens] (->> tokens utils/create-lines
+                                       (col/intertext-boundaries 4)
+                                       (map #(assoc % :class :visual-feature :boundary-axis :x))))
+   :segments        (fnk [tokens graphics visual-features] (bs/compose-segments tokens (concat visual-features graphics)))
+   :blocks          (fnk [segments graphics]
+                      (->> (bc/compose-blocks segments graphics)
+                           f/enfeature-blocks
+                           (map cl/add-class)))
+   :new-components  (fnk [blocks] (cmps/new-components blocks))
+   :components      (fnk [tokens blocks]
+                      (cmps/->components tokens blocks))})
+
+(def parse-page (graph/lazy-compile page-parser))
+
+(defn merge-graphics [pdf-url pages]
+  (let [page->graphics (try (->> (pe/extract-graphics pdf-url)
+                                 g/explode-graphics
+                                 (group-by :page-number))
+                            (catch Exception ex (println "Exception during graphics processing: " (.getMessage ex))))]
+    (map #(assoc % :graphics (get page->graphics (some :page-number (:text-positions %)) [])) pages)))
+
+(defn build-pages
+  ([pdf-url] (build-pages nil pdf-url))
+  ([page-bounds pdf-url]
+   (->> (pe/extract-text-positions pdf-url page-bounds)
+        (map (fn [{:keys [page-number x y] :as tp}]
+               (assoc tp :id (str page-number "_" (int x) "_" (int y)))))
+        (group-by :page-number)
+        (sort-by key)
+        (map (comp (partial array-map :text-positions) second))
+        (merge-graphics pdf-url))))
 
 
 (defn- block-transforms [pdf-path {:keys [page-bounds] :as opts}]
@@ -50,13 +76,14 @@
 (defn transform
   "Transforms pages in the range [(first page-bounds) , (last page-bounds))
    of the input pdf (input as a url string or File object) into the desired output format.
-   Supported formats include blocks, plain-text, pages-of-lines, and components (default)."
+   Supported formats include tokens, segments, blocks, plain-text, pages-of-lines, and components (default)."
   [pdf-path & [{:keys [page-bounds format] :as opts}]]
   (case (keyword format)
     :plain-text  (pdf->text pdf-path page-bounds)
     :pages-of-lines (pdf->pages-of-lines pdf-path page-bounds)
-    (->> (pages-of-words pdf-path page-bounds)
-         (mapcat #(parse-page % opts)))))
+    (->> pdf-path
+         (build-pages page-bounds)
+         (mapcat (comp format parse-page)))))
 
 
 (defn annotate-components

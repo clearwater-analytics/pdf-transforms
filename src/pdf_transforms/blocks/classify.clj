@@ -34,8 +34,10 @@
       (re-matches footnote as-text))))                      ;lines starts with what should be a superscript
 
 (defn key? [{{:keys [keyword-start? neighbors-right
-                     bold-ratio italic-ratio]} :features :as blk}]
-  (and (label? blk)
+                     bold-ratio italic-ratio]} :features
+             txt :text :as blk}]
+  (and (label? blk) txt
+       (not (re-matches #".+:\s*\S+.*" txt))
        (or (and keyword-start? (seq neighbors-right))
            (and (or (== 1 bold-ratio) (== 1 italic-ratio))
                 (some-> neighbors-right first (#(and (< (:bold-ratio %) 1)
@@ -51,7 +53,8 @@
                utils/create-lines
                (map (comp (partial s/join " ") (partial map :text)))
                (filter (partial re-matches utils/delimited))
-               count) 1)))
+               count) 1)
+       (re-matches utils/delimited (:text (last tokens)))))
 
 (defn table-column? [{{:keys [num-components-right
                               num-components-left num-lines
@@ -69,12 +72,11 @@
    [:table-cell          #(and (table-column? %) (= 1 (get-in % [:features :num-lines])))]
    [:table-column        table-column?]
    [:column-n-header     cmn/data-and-labels?]
-   ;[:label               label?] ;TODO probably need to update the table detection logic to account for this
+   [:paragraph           #(pos? (get-in % [:features :num-sentences]))]
    [:text                (fn [{{:keys [num-english-words num-datapoints]} :features}]
                            (and (pos? num-english-words) (> num-english-words num-datapoints)))]
    [:page-footer         page-footer?]
-   [:table-footer        table-footer?]
-   [:paragraph           #(pos? (get-in % [:features :num-sentences]))]])
+   [:table-footer        table-footer?]])
 
 
 (defn classify [block]

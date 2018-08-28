@@ -11,7 +11,8 @@
 (def sentence-ending #".*[\da-zA-Z\)][.!?][\"\'\)]?")
 (def header-like #".*[a-zA-Z]{2,}.*[^.!?]\s*[\"\'\)]?")
 (def dash-line #"\s*(?:[-]{3,}|[_]{3,})\s*")
-(def delimited #".*(?:[:-]|[.]{2,})")
+;(def delimited #".*(?:[:-]|[.]{2,})")
+(def delimited #".*\:")
 
 (defn gap? [{x0 :x w0 :width t0 :text}
             {x1 :x w1 :width t1 :text}]
@@ -89,6 +90,9 @@
                 (conj (pop partitions) (conj (peek partitions) datum)))
               (conj partitions [datum])))
           [] seq-data))
+
+(defn token->ann-format [{:keys [x width y height] :as token}]
+  (assoc token :x0 x :x1 (+ x width) :y0 (- y height) :y1 y))
 
 (defn add-tabs [tokens]
   (->> tokens

@@ -38,7 +38,8 @@
      :num-english-words    (->> text-list
                                 (filter (partial re-matches word-like))
                                 count)
-     :num-datapoints       (->> text-list
+     :num-datapoints (->> text-list (keep (partial re-find #"\d")) count)
+     #_(->> text-list
                                 (keep (partial re-matches utils/datapoint))
                                 count)
      :uniform-line-width?  (uniform-line-width? lines)
