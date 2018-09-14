@@ -11,6 +11,10 @@
 (defn words-in-box [words box-coords]
   (filter (partial in-box? box-coords) words))
 
+(defn centered? [page-x0 page-x1 {:keys [x0 x1]}]
+  (and (> x0 (+ 50 page-x0))                                ;not just left aligned and spanning entire page
+       (utils/within-x? 10 (/ (+ x0 x1) 2.0) (/ (+ page-x0 page-x1) 2.0))))
+
 (defn relative-to
   "Returns the position of second box relative to the first box.  Result is a set that contains
   those of the 4 directions are applicable to the relationship. The empty set means that the boxes overlap."

@@ -13,7 +13,9 @@
             [pdf-transforms.common :as cmn]
             [pdf-transforms.components.core :as cmps]
             [pdf-transforms.core :as core]
-            [clojure.string :as s]))
+            [clojure.string :as s]
+
+            [pdf-transforms.blocks.new-features :as nf]))
 
 
 ;;;;;;;;;;;;;    COMPONENTS    ;;;;;;;;;;;;;;;
@@ -60,12 +62,12 @@
 
 
 ;assumes that batch-folder is in the pdf_parsing directory
-(defn annotate-batch [batch-folder & [level]]
+(defn annotate-batch [batch-folder & [level oracle?]]
   (let [base-dir (str u/home-dir "/Documents/pdf_parsing/" batch-folder "/")]
       (->> (str base-dir "raw")
            u/get-pdfs-in-dir
            (map #(do (println "processing: " %)
-                     (annotate-it % {:out (str base-dir (name level)) :level level})))
+                     (annotate-it % {:out (str base-dir (if oracle? "oracle" (name level))) :level level})))
            dorun)))
 
 
@@ -76,6 +78,13 @@
                       (mapcat (comp :visual-features core/parse-page)))]
     (a/annotate {:pdf-url pdf-url :output-directory (or out-dir u/annotated-dir)}
                 (concat graphics features))))
+
+
+(defn parse-oracle-doc [pdf-url]
+  (let [cname->class (zipmap (vals a/oracle-block-colors) (keys a/oracle-block-colors))
+        color->class (zipmap (map vec (vals a/COLORS)) (map cname->class (keys a/COLORS)))]
+      (map #(assoc % :id (nf/block-id %)
+                     :class (color->class (:color %))) (pe/extract-annotations pdf-url))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -91,7 +100,6 @@
   (annotate-batch "control_2" :segments)
   (annotate-batch "control_2" :blocks)
   (annotate-batch "control_2" :components)
-  (annotate-batch "control_2" :new-components)
 
 
   (annotate-batch "blackrock" :segments)
@@ -114,20 +122,20 @@
          dorun))
 
   ;parse segments
-  (->> (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/180848FR9.pdf")
+  (->> (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/transposed_table.pdf")
        core/build-pages
-       (mapcat (comp :segments core/parse-page))
+       (mapcat (comp :blocks core/parse-page))
 
        )
 
   ;annotate single doc
-  (let [pdf (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/180848FR9.pdf")]
+  (let [pdf (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/866c354c846ed29c9d415dd6066aecd8.pdf")]
     (->> pdf
          core/build-pages
          (mapcat (comp :blocks core/parse-page))
+         (map #(dissoc % :class))
          (a/annotate {:pdf-url pdf :output-directory u/annotated-dir})
          dorun))
-
 
   #_(->> (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/repeat_tbl_with_groups.pdf")
          (#(annotate-it % {:level :blocks}))
@@ -135,6 +143,13 @@
 
   #_(annotate-features (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/headless_col.pdf"))
 
+
+  (->> (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/866c354c846ed29c9d415dd6066aecd8.pdf")
+       core/build-pages
+       (mapcat (comp #_nf/new-enfeature-blocks :blocks core/parse-page))
+       (map #(dissoc % :tokens))
+
+       )
 
 
 

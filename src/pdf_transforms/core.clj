@@ -6,7 +6,7 @@
             [pdf-transforms.components.core :as cmps]
             [pdf-transforms.utilities :as utils]
             [pdf-transforms.annotations :as ann]
-            [pdf-transforms.blocks.features :as f]
+            [pdf-transforms.blocks.new-features :as f]
             [pdf-transforms.blocks.segments :as bs]
             [pdf-transforms.blocks.core :as bc]
             [plumbing.core :refer [fnk]]
@@ -42,9 +42,9 @@
    :segments        (fnk [tokens graphics visual-features] (bs/compose-segments tokens (concat visual-features graphics)))
    :blocks          (fnk [segments graphics]
                       (->> (bc/compose-blocks segments graphics)
-                           f/enfeature-blocks
-                           (map cl/add-class)))
-   :new-components  (fnk [blocks] (cmps/new-components blocks))
+                           f/ml-enfeature
+                           (map cl/add-ml-class)))
+   :clusters        (fnk [blocks] (cmps/compose-clusters blocks))
    :components      (fnk [tokens blocks]
                       (cmps/->components tokens blocks))})
 

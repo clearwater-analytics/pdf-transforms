@@ -74,10 +74,6 @@
                  [[(first positional-data)]]
                  (rest positional-data)))))
 
-(defn assoc-id [{:keys [page-number x y] :as word}]
-  (if (and x y)
-    (assoc word :id (str page-number "_" (int x) "_" (int y)))
-    (do (println word) (assoc word :id "0_0_0"))))
 
 (defn partition-when
   "Partitions seq-data by creating a new partition whenever predicate returns true.
@@ -127,3 +123,13 @@
                  [{:x0 (apply min (map :x headers))
                    :x1 (apply max (map (fn [{:keys [x width]}] (+ x width)) headers))
                    :y0 y1 :y1 y1 :page-number pg :type :table-column}]))))
+
+
+(defn euc-distance
+  "Calculates the euclidean distance between the centers of two rectangles"
+  [{:keys [x0 x1 y0 y1]}
+   {bx0 :x0 bx1 :x1 by0 :y0 by1 :y1}]
+  (let [p1 [(/ (+ x1 x0) 2) (/ (+ y1 y0) 2)]
+        p2 [(/ (+ bx1 bx0) 2) (/ (+ by1 by0) 2)]]
+    (Math/sqrt (+ (Math/pow (- (first p1) (first p2)) 2)
+                  (Math/pow (- (second p1) (second p2)) 2)))))

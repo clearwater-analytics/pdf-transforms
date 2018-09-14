@@ -9,15 +9,9 @@
                         {by0 :y0 b-height :height}]
   (< (- by0 y1) (* 0.75 (min height b-height))))
 
-
-(defn centered? [page-x0 page-x1 {:keys [x0 x1] :as seg}]
-  (and (> x0 (+ 50 page-x0))                                ;not just left aligned and spanning entire page
-       (utils/within-x? 10 (/ (+ x0 x1) 2.0) (/ (+ page-x0 page-x1) 2.0))))
-
-
 (defn weird-change? [{page-x0 :x0 page-x1 :x1} {:keys [tokens x0] :as seg1} {bx0 :x0 b-tokens :tokens :as seg2}]
   (or
-    (and (centered? page-x0 page-x1 seg1) (not (centered? page-x0 page-x1 seg2)) (not (utils/within-x? 20 x0 bx0)))
+    (and (cmn/centered? page-x0 page-x1 seg1) (not (cmn/centered? page-x0 page-x1 seg2)) (not (utils/within-x? 20 x0 bx0)))
     (not (and (seq (s/intersection (set (map :font tokens)) (set (map :font b-tokens))))
               (seq (s/intersection (set (map :font-size tokens)) (set (map :font-size b-tokens))))))))
 

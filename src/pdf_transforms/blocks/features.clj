@@ -4,10 +4,6 @@
             [pdf-transforms.common :as cmn]
             [clojure.string :as s]))
 
-;50 -> 600
-(def LEFT-MARGIN 50)
-(def RIGHT-MARGIN 600)
-(def CENTER-PAGE 325)
 (def footnote #"(?:[*+†]|\(\d{1,2}\))\s*[a-zA-Z]+.*")
 (def word-like #"[^\d]*[aeiouyAEIOUY]+[^\d]*")
 
@@ -19,15 +15,15 @@
             (partition 2 1)
             (every? (partial apply utils/within-x? 10)))))
 
-(defn intra-features [{:keys [x0 x1 y0 y1 tokens]}]
+(defn intra-features [{page-x0 :x0 page-x1 :x1} {:keys [x0 x1 y0 y1 tokens] :as blk}]
   (let [lines (utils/create-lines tokens)
         text-list (map :text tokens)
         as-text (s/join " " text-list)
         num-tokens (count tokens)]
     {:horizontal-alignment (cond
-                             (utils/within-x? 50 x0 LEFT-MARGIN) :left
-                             (utils/within-x? 20 CENTER-PAGE (/ (+ x1 x0) 2)) :center
-                             :else :right)
+                             (cmn/centered? page-x0 page-x1 blk) :center
+                             (utils/within-x? 25 x0 page-x0) :left
+                             :else :floating)
      :text                 as-text
      :width                (int (- x1 x0))
      :height               (int (- y1 y0))
@@ -38,10 +34,7 @@
      :num-english-words    (->> text-list
                                 (filter (partial re-matches word-like))
                                 count)
-     :num-datapoints (->> text-list (keep (partial re-find #"\d")) count)
-     #_(->> text-list
-                                (keep (partial re-matches utils/datapoint))
-                                count)
+     :num-datapoints       (->> text-list (keep (partial re-find #"\d")) count)
      :uniform-line-width?  (uniform-line-width? lines)
      :num-tokens           num-tokens
      :num-lines            (:sum (reduce (fn [{:keys [sum prev-y]} {y :y}]
@@ -74,7 +67,9 @@
 
 
 (defn enfeature-blocks [blocks]
-  (let [featured (map #(assoc % :features (intra-features %)) blocks)]
+  (let [page-dimensions {:x0 (apply min (map :x0 blocks))
+                         :x1 (apply max (map :x1 blocks))}
+        featured (map #(assoc % :features (intra-features page-dimensions %)) blocks)]
     (map (fn [cmpnt]
            (update cmpnt :features (partial merge (inter-features featured cmpnt)))) featured)))
 

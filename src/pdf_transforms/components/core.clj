@@ -24,41 +24,60 @@
                                                            txt/->labels-with-data])
        cmn/sort-blocks))
 
-;TODO give all blocks an id (page specific, probably just its index), a component is a set of blocks, which we can represent as a set of block ids
-;  This way, is block in a component? is easy and we can have all of the context for a page while also having
-;partitioned things into components.
-
-;build the component of which this block is a member
-;returns a components and unclassified blocks
-(defn big-mama-hug [& x] x #_[{:class class
-                     {:keys [neighbors-right]} :features
-                     :as block}
-                    blocks]
-  #_(cond
-    (and (#{:key :key-column} class)
 
 
 
-         )
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;          NEW STUFF           ;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn horizontally-near? [{x0 :x1} {x1 :x0}]
+  (< (- x1 x0) 150))
+
+(defn compatible-classes? [blocks {:keys [class]}]
+  (let [classes (mapv :class blocks)]
+    (or
+      ;(or (= :key (last classes)) (= :key-column (last classes))) ;key to left
+      (and (or (= :table-cell class) (= :table-column class)) ;data to the right
+           (or (= :table-cell (last classes)) (= :table-column (last classes)))) ;data to the left
+
+      )))
+
+(defn filter-candidates [block other-blocks]
+  (:candidates
+    (reduce (fn [{:keys [candidates] :as box} blk]
+              (if (and (horizontally-near? (last candidates) blk)
+                       (compatible-classes? candidates blk))
+                (update box :candidates conj blk)
+                (reduced box)))
+            (assoc block :candidates [block])
+            (filter (comp (partial = #{:right}) (partial cmn/relative-to block)) other-blocks))))
 
 
 
-
-    ))
-
-(defn new-components [blocks]
-  (loop [components []
-         blocks-left blocks]
-    (if (empty? blocks-left)
-      components
-      (let [{:keys [component leftover]} (big-mama-hug (first blocks-left) (rest blocks-left))]
-        (recur (conj components component) leftover)))))
+(defn cluster-adjacent [{{:keys [num-components-left num-components-right]} :features :as block}
+                        other-blocks]
+  (if (zero? (+ num-components-left num-components-right))
+    [block]
+    (filter-candidates block other-blocks)))
 
 
+(def format-clusters
+  (comp
+    #(select-keys % [:x0 :x1 :y0 :y1 :page-number :tokens])
+    (partial reduce (fn [res {:keys [tokens] :as seg}]
+                      (-> res
+                          (utils/expand-bounds seg)
+                          (update :tokens #(concat % tokens)))))))
 
 
-
-
+(defn compose-clusters [blocks]
+  (loop [clusters []
+         remaining blocks]
+    (if-not (seq remaining)
+      clusters
+      (let [cluster (cluster-adjacent (first remaining) (rest remaining))]
+        (recur (conj clusters (format-clusters cluster)) (remove (into #{} cluster) remaining))))))
 
 
 

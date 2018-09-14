@@ -94,7 +94,7 @@
        rseq))
 
 (defn build-id [{:keys [page-number x y]}]
-  (str page-number "_" (int y) "_" (int x)))
+  (str page-number "_" (int x) "_" (int y)))
 
 (defn text-positions->pages-of-tokens [text-positions]
   (->> text-positions

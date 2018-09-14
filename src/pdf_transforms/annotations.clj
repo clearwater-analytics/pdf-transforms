@@ -12,40 +12,54 @@
            (org.apache.pdfbox.pdmodel.interactive.annotation PDAnnotationSquareCircle PDBorderStyleDictionary)
            (org.apache.pdfbox.pdmodel.graphics.color PDColor PDDeviceRGB)))
 
-(def COLORS {:red (float-array [1.0 0.0 0.0])
+(def COLORS {:black (float-array [0.0 0.0 0.0])
+             :red (float-array [1.0 0.0 0.0])
              :magenta (float-array [1.0 0.0 1.0])
              :pink  (float-array [1.0 0.7 0.7])
+             :light-purple (float-array [0.92 0.77 1.0])
              :green (float-array [0.0 1.0 0.0])
+             :dark-green (float-array [0.29 0.55 0.23])
              :cyan  (float-array [0.0 1.0 1.0])
+             :light-blue  (float-array [0.09 0.77 1.0])
              :blue (float-array [0.0 0.0 1.0])
-             :yellow (float-array [1.0 1.0 0.0])})
+             :yellow (float-array [1.0 1.0 0.0])
+             :orange (float-array [1.0 0.62 0.08])})
 
-(defn pd-color [color-name] (new PDColor (COLORS color-name) PDDeviceRGB/INSTANCE))
+(defn pd-color [color-name]
+  (when color-name
+    (new PDColor (COLORS color-name) PDDeviceRGB/INSTANCE)))
 
-(def block-colors {:table-cell (pd-color :pink)
-                   :table-column (pd-color :magenta)
-                   :table (pd-color :magenta)
-                   :column-n-header (pd-color :magenta)
-                   :key (pd-color :yellow)
-                   :key-column (pd-color :yellow)
-                   :labeled (pd-color :cyan)
-                   :page-footer (pd-color :green)
-                   :table-footer (pd-color :green)
-                   :paragraph (pd-color :blue)
-                   :text (pd-color :cyan)
-                   :graphic (pd-color :green)
-                   :visual-feature (pd-color :cyan)})
+(def block-colors {:column-n-header :magenta
+                   :key             :yellow
+                   :labeled         :cyan
+                   :page-footer     :green
+                   :table-footer    :green
+                   :graphic         :green
+                   :visual-feature  :cyan})
 
-(def component-colors {:table  (pd-color :magenta)
-                       :table-column (pd-color :magenta)
-                       :keywords  (pd-color :red)
-                       :superscript (pd-color :cyan)
-                       :text   (pd-color :blue)})
+
+(def oracle-block-colors {:table-       :pink
+                          :table-column    :magenta
+                          :key-column      :yellow
+                          :footer          :green
+                          :paragraph       :blue
+                          :text            :cyan
+                          :label :orange
+                          :solo-text-block :light-blue         ;todo
+                          :text-rows :light-purple               ;todo
+                          :data-block :red})            ;todo
+
+
+(def component-colors {:table        :magenta
+                       :table-column :magenta
+                       :keywords     :red
+                       :superscript  :cyan
+                       :text         :blue})
 
 (def THICK-BORDER (doto (new PDBorderStyleDictionary) (.setWidth (float 1.0))))
 
 (defn obj->color [type class]
-  (or (component-colors type) (block-colors class)))
+  (or (pd-color (component-colors type)) (pd-color (block-colors class)) (pd-color (oracle-block-colors class))))
 
 (defn output-file [pdf-url out-dir]
   (let [filename (if (and (string? pdf-url) (re-matches #"file:/.*" pdf-url))
@@ -61,7 +75,7 @@
                    (.setUpperRightX x1) (.setUpperRightY y1))]
     (doto
       (PDAnnotationSquareCircle. PDAnnotationSquareCircle/SUB_TYPE_SQUARE)
-      (.setColor (or (obj->color type class) (pd-color :red)))
+      (.setColor (or (obj->color type class) (pd-color :black)))
       (.setTitlePopup (str "Class: " (or type class)))
       (.setBorderStyle THICK-BORDER)
       (.setRectangle position))))
