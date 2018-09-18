@@ -119,7 +119,7 @@
     (assoc block :class (first classes)
                  :classes classes)))
 
-(defn classify [block]
+(defn ml-classify [block]
   (keep (fn [[class instance-of-class?]] (when (instance-of-class? block) class)) ml-class->rules))
 
 

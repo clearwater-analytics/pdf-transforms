@@ -10,6 +10,24 @@
 (def word-like #"[^\d]*[aeiouyAEIOUY]+[^\d]*")
 (def MAX-GAP 1000)
 
+(def vowel? #{\a \e \i \o \u \y})
+(def consonant? #{\q \w \r \t \p \s \d \f \g \h \j \k \l \z \x \c \v \b \n \m})
+(def digit? #{\1 \2 \3 \4 \5 \6 \7 \8 \9 \0})
+(def other? identity)
+
+
+(defn token-summary [string]
+  (->> string
+       s/lower-case
+       (take 10)
+       (map (apply some-fn (map (partial apply (fn [class pred] #(when (pred %) class))) [[[1 0 0 0] vowel?]
+                                                                                          [[0 1 0 0] consonant?]
+                                                                                          [[0 0 1 0] digit?]
+                                                                                          [[0 0 0 1] other?]])))
+       (#(concat % (repeat 10 [0 0 0 0]))) ;pad to make fixed width
+       (take 10)))
+
+
 ;can blocks have a more raw representation?
 (def internal-features-graph
   {:lines                (fnk [tokens] (utils/create-lines tokens))
@@ -45,6 +63,7 @@
    :itemized-start?      (fnk [text tokens]
                            (boolean (or (:superscript? (first tokens)) ;line starts with a superscript
                                         (re-matches footnote text))))
+   :first-token-summary    (fnk [tokens] (-> tokens first :text token-summary))
 
    ;composed features
    :data-ratio   (fnk [num-datapoints num-tokens] (/ num-datapoints num-tokens))
@@ -155,23 +174,27 @@
    [:italic-ratio 0]
    [:word-ratio 0]
    [:height 0]
+   [:first-token-summary (token-summary "")]
+
    [:num-blocks-above 0]
    [:num-blocks-directly-above 0]
    [:num-blocks-directly-below 0]
    [:num-blocks-below 0]
    [:num-blocks-right 0]
    [:num-blocks-left 0]
+
    [:gap-right 0]
    [:gap-left 0]
    [:gap-above 0]
    [:gap-below 0]])
 
 (defn core-vectorize [features]
-  (map #(get {false 0 true 1 nil 0} % %)
-       (-> features
-           (update :horizontal-alignment {:left [1 0] :center [0 1] :float [0 0]})
-           (map features-seq)
-           flatten)))
+  (let [feature-order (map first features-seq)]
+    (map #(get {false 0 true 1 nil 0} % %)
+         (-> features
+             (update :horizontal-alignment {:left [1 0] :center [0 1] :float [0 0]})
+             (map feature-order)
+             flatten))))
 
 (defn context-vecs
   "Ensures consistent features vector length by ensuring a consistent number of
@@ -187,13 +210,14 @@
     (str page-number "_" (int y0) "_" (int x0))))
 
 (defn ml-vectorize [{{:keys [blocks-directly-below blocks-directly-above
-                             blocks-left blocks-right]} :features :as block}]
+                             blocks-left blocks-right] :as features} :features :as block}]
   {:id (block-id block)
-   :feature-vec (concat (core-vectorize (:features block))
+   :feature-vec (concat (core-vectorize features)
                         (context-vecs 2 blocks-directly-above)
                         (context-vecs 2 blocks-directly-below)
                         (context-vecs 2 blocks-left)
-                        (context-vecs 2 blocks-right))})
+                        (context-vecs 2 blocks-right))
+   :text (:text features)})
 
 ;classes
 ; table-column, table-column-header, text, page-footer, table-footer, label, value, data-point

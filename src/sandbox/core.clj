@@ -84,14 +84,47 @@
   (let [cname->class (zipmap (vals a/oracle-block-colors) (keys a/oracle-block-colors))
         color->class (zipmap (map vec (vals a/COLORS)) (map cname->class (keys a/COLORS)))]
       (map #(assoc % :id (nf/block-id %)
+                     :page-number (:page-number %)
                      :class (color->class (:color %))) (pe/extract-annotations pdf-url))))
 
+
+(defn manual-box-label->block-labels [pdf-url]
+  (let [manual-boxes (parse-oracle-doc pdf-url)
+        blocks (->> pdf-url core/build-pages (mapcat (comp :blocks core/parse-page)))]
+    (mapcat (fn [{:keys [page-number class] :as x}] (->> blocks
+                                                         (filter #(and (= page-number (:page-number %)) (cmn/within? x %)))
+                                                         (map #(assoc {} :class class
+                                                                         :text (get-in % [:features :text])
+                                                                         :filename (last (s/split pdf-url #"/"))
+                                                                         :id (nf/block-id %))))) manual-boxes)))
+
+
+(defn blocks-as-feature-vectors [pdf-url]
+  (->> pdf-url
+       core/build-pages
+       (mapcat (comp (partial map nf/ml-vectorize) :blocks core/parse-page))))
+
+(defn block-truth-data [raw-pdf-url oracle-pdf-url]
+  (->> (blocks-as-feature-vectors raw-pdf-url)
+       (concat (manual-box-label->block-labels oracle-pdf-url))
+       (filter :id)
+       (group-by :id)
+       (map (comp (partial apply merge) second))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;    Repl snippets
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (comment
+
+  ;build oracle data set
+  ;dump this in mongo
+  (let [base-dir (str u/home-dir "/Documents/pdf_parsing/control_2/")
+        oracle-pdfs (u/get-pdfs-in-dir (str base-dir "oracle_9_17_2018"))
+        raw-pdfs (u/get-pdfs-in-dir (str base-dir "raw"))]
+    (map block-truth-data (sort raw-pdfs) (sort oracle-pdfs)))
+
+
 
   (annotate-batch "control_1" :tokens)
   (annotate-batch "control_1" :segments)
@@ -129,11 +162,10 @@
        )
 
   ;annotate single doc
-  (let [pdf (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/866c354c846ed29c9d415dd6066aecd8.pdf")]
+  (let [pdf (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/54811A4J9.pdf")]
     (->> pdf
          core/build-pages
-         (mapcat (comp :blocks core/parse-page))
-         (map #(dissoc % :class))
+         (mapcat (comp :components core/parse-page))
          (a/annotate {:pdf-url pdf :output-directory u/annotated-dir})
          dorun))
 
@@ -144,10 +176,11 @@
   #_(annotate-features (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/headless_col.pdf"))
 
 
-  (->> (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/866c354c846ed29c9d415dd6066aecd8.pdf")
+
+  (->> (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/13034AFJ4.pdf")
        core/build-pages
-       (mapcat (comp #_nf/new-enfeature-blocks :blocks core/parse-page))
-       (map #(dissoc % :tokens))
+       (mapcat (comp :blocks core/parse-page))
+       (map (comp #(update % :feature-vec frequencies) nf/ml-vectorize))
 
        )
 

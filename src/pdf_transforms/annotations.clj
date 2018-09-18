@@ -23,7 +23,7 @@
              :light-blue  (float-array [0.09 0.77 1.0])
              :blue (float-array [0.0 0.0 1.0])
              :yellow (float-array [1.0 1.0 0.0])
-             :orange (float-array [1.0 0.62 0.08])})
+             :orange (float-array [1.0 0.62 0.31])})
 
 (defn pd-color [color-name]
   (when color-name
@@ -38,16 +38,10 @@
                    :visual-feature  :cyan})
 
 
-(def oracle-block-colors {:table-       :pink
-                          :table-column    :magenta
-                          :key-column      :yellow
-                          :footer          :green
-                          :paragraph       :blue
-                          :text            :cyan
-                          :label :orange
-                          :solo-text-block :light-blue         ;todo
-                          :text-rows :light-purple               ;todo
-                          :data-block :red})            ;todo
+(def oracle-block-colors {:table           :magenta
+                          :key-val         :orange
+                          :independent     :blue
+                          :fragmented      :cyan})
 
 
 (def component-colors {:table        :magenta
