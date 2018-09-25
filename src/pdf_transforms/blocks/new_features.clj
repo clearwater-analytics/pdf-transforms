@@ -33,12 +33,15 @@
   {:lines                (fnk [tokens] (utils/create-lines tokens))
    :text-list            (fnk [tokens] (map :text tokens))
    :text                 (fnk [text-list] (s/join " " text-list))
+
    :num-tokens           (fnk [tokens] (count tokens))
-   :horizontal-alignment (fnk [page-x0 page-x1 x0 x1]
-                           (cond
-                             (cmn/centered? page-x0 page-x1 {:x0 x0 :x1 x1}) :center
-                             (utils/within-x? 25 x0 page-x0) :left
-                             :else :float))
+   ;:horizontal-alignment (fnk [page-x0 page-x1 x0 x1]
+   ;                        (cond
+   ;                          (cmn/centered? page-x0 page-x1 {:x0 x0 :x1 x1}) :center
+   ;                          (utils/within-x? 25 x0 page-x0) :left
+   ;                          :else :float))
+   :dist-from-left          (fnk [page-x0 x0] (- x0 page-x0))
+   :dist-from-right         (fnk [page-x1 x1] (- page-x1 x1))
    :width                (fnk [x1 x0] (int (- x1 x0)))
    :height               (fnk [y0 y1] (int (- y1 y0)))
    :bold-ratio           (fnk [tokens] (/ (count (filter :bold? tokens)) (count tokens)))
@@ -63,7 +66,7 @@
    :itemized-start?      (fnk [text tokens]
                            (boolean (or (:superscript? (first tokens)) ;line starts with a superscript
                                         (re-matches footnote text))))
-   :first-token-summary    (fnk [tokens] (-> tokens first :text token-summary))
+   ;:first-token-summary    (fnk [tokens] (-> tokens first :text token-summary))
 
    ;composed features
    :data-ratio   (fnk [num-datapoints num-tokens] (/ num-datapoints num-tokens))
@@ -74,6 +77,8 @@
 
 
    })
+
+(def internal-features (graph/compile internal-features-graph))
 
 
 (defn x-aligned-bits? [{page-x0 :x0 page-x1 :x1}
@@ -125,20 +130,18 @@
      :blocks-right (map :idx to-right)}))
 
 
-(def internal-features (graph/compile internal-features-graph))
-
 (defn- core-features [{:keys [context-features internal-features]}]
   (merge internal-features (dissoc context-features :blocks-right :blocks-left :blocks-directly-above :blocks-directly-below)))
 
 
-(defn ml-enfeature [blocks]
+(defn ml-enfeature [{:keys [x0 x1] :as page-meta} blocks]
   (let [idx-blocks (map (fn [i blk] (assoc blk :idx i)) (range) blocks)
         block-vec (->> idx-blocks
                        (map (comp
                                #(update % :internal-features dissoc :text-list :lines)
                                #(assoc % :context-features (context-features idx-blocks %))
-                               #(assoc % :internal-features (internal-features (assoc % :page-x0 (apply min (map :x0 blocks))
-                                                                                        :page-x1 (apply max (map :x1 blocks))))))))
+                               #(assoc % :internal-features (internal-features (assoc % :page-x0 x0
+                                                                                        :page-x1 x1))))))
         lookup (mapv core-features block-vec)]
     (map (fn [{:keys [context-features internal-features] :as blk}]
            (-> blk
@@ -196,7 +199,7 @@
              (map feature-order)
              flatten))))
 
-(defn context-vecs
+(defn context-vectors
   "Ensures consistent features vector length by ensuring a consistent number of
   neighbors.  Adds all zero vectors when context is missing."
   [context-window-size context]
@@ -213,11 +216,50 @@
                              blocks-left blocks-right] :as features} :features :as block}]
   {:id (block-id block)
    :feature-vec (concat (core-vectorize features)
-                        (context-vecs 2 blocks-directly-above)
-                        (context-vecs 2 blocks-directly-below)
-                        (context-vecs 2 blocks-left)
-                        (context-vecs 2 blocks-right))
+                        (context-vectors 2 blocks-directly-above)
+                        (context-vectors 2 blocks-directly-below)
+                        (context-vectors 2 blocks-left)
+                        (context-vectors 2 blocks-right))
    :text (:text features)})
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;      Random Forest       ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn core-feats [features]
+  (->> (dissoc features :blocks-directly-below :blocks-directly-above
+               :blocks-left :blocks-right :text :lines :text-list)
+       (map (fn [[k v]] [k (get {false 0 true 1 nil 0} v v)]))
+       (into {})))
+
+(defn contextual-feats
+  "Ensures consistent features vector length by ensuring a consistent number of
+  neighbors.  Adds all zero vectors when context is missing."
+  [key-prefix core-features window-size context]
+  (->> core-features
+       (map (fn [[k _]] [k 0]))
+       (into {})
+       (repeat window-size)
+       (concat (map core-feats context))
+       (take window-size)
+       (map (fn [idx features]
+              (into {} (map (fn [[k v]] [(keyword (s/join "-" [key-prefix idx (name k)])) v]) features))) (range))
+       (apply merge)))
+
+(defn rand-forest-features [{{:keys [blocks-directly-below blocks-directly-above
+                                     blocks-left blocks-right] :as features} :features :as block}]
+  (let [core (core-feats features)]
+    {:id          (block-id block)
+     :feature-vec (-> core
+                      (merge (contextual-feats "above" core 2 blocks-directly-above))
+                      (merge (contextual-feats "below" core 2 blocks-directly-below))
+                      (merge (contextual-feats "left" core 2 blocks-left))
+                      (merge (contextual-feats "right" core 2 blocks-right)))
+     :text        (:text features)})
+
+  )
 
 ;classes
 ; table-column, table-column-header, text, page-footer, table-footer, label, value, data-point

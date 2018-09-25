@@ -39,35 +39,48 @@
    :visual-features (fnk [tokens] (->> tokens utils/create-lines
                                        (col/intertext-boundaries 4)
                                        (map #(assoc % :class :visual-feature :boundary-axis :x))))
-   :segments        (fnk [tokens graphics visual-features] (bs/compose-segments tokens (concat visual-features graphics)))
-   :blocks          (fnk [segments graphics]
+   :segments        (fnk [tokens {graphics []} visual-features] (bs/compose-segments tokens (concat visual-features graphics)))
+   :blocks          (fnk [segments {graphics []} x0 x1 y0 y1]
                       (->> (bc/compose-blocks segments graphics)
-                           f/ml-enfeature
+                           (f/ml-enfeature {:x0 x0 :x1 x1 :y0 y0 :y1 y1})
                            (map cl/add-ml-class)))
-   :clusters        (fnk [blocks] (cmps/compose-clusters blocks))
    :components      (fnk [tokens blocks]
                       (cmps/->components tokens blocks))})
 
 (def parse-page (graph/lazy-compile page-parser))
 
-(defn merge-graphics [pdf-url pages]
-  (let [page->graphics (try (->> (pe/extract-graphics pdf-url)
-                                 g/explode-graphics
-                                 (group-by :page-number))
-                            (catch Exception ex (println "Exception during graphics processing: " (.getMessage ex))))]
-    (map #(assoc % :graphics (get page->graphics (some :page-number (:text-positions %)) [])) pages)))
+
+(defn meta-by-page [[page-min page-max] pdf-url]
+  (->> (pe/extract-page-characteristics pdf-url)
+       (filter (fn [{:keys [page-number]}]
+                 (and (>= page-number (or page-min 0)) (< page-number (or page-max 9999)))))))
+
+(defn graphics-by-page [page-bounds pdf-url]
+  (try (->> (pe/extract-graphics pdf-url page-bounds)
+            g/explode-graphics
+            (group-by :page-number)
+            (map (fn [[pg data]]
+                   {:page-number pg :graphics data})))
+       (catch Exception ex (println "Exception during graphics processing: " (.getMessage ex)))))
+
+(defn text-positions-by-page [page-bounds pdf-url]
+  (->> (pe/extract-text-positions pdf-url page-bounds)
+       (map (fn [{:keys [page-number x y] :as tp}]
+              (assoc tp :id (str page-number "_" (int x) "_" (int y)))))
+       (group-by :page-number)
+       (map (fn [[pg data]]
+              {:page-number pg :text-positions data}))))
+
 
 (defn build-pages
   ([pdf-url] (build-pages nil pdf-url))
   ([page-bounds pdf-url]
-   (->> (pe/extract-text-positions pdf-url page-bounds)
-        (map (fn [{:keys [page-number x y] :as tp}]
-               (assoc tp :id (str page-number "_" (int x) "_" (int y)))))
+   (->> (concat (graphics-by-page page-bounds pdf-url)
+                (meta-by-page page-bounds pdf-url)
+                (text-positions-by-page page-bounds pdf-url))
         (group-by :page-number)
-        (sort-by key)
-        (map (comp (partial array-map :text-positions) second))
-        (merge-graphics pdf-url))))
-
+        (map (comp (partial apply merge) second))
+        (sort-by :page-number))))
 
 (defn- block-transforms [pdf-path {:keys [page-bounds] :as opts}]
   (->> (pages-of-words pdf-path page-bounds)

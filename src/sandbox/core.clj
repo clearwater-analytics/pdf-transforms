@@ -102,7 +102,9 @@
 (defn blocks-as-feature-vectors [pdf-url]
   (->> pdf-url
        core/build-pages
-       (mapcat (comp (partial map nf/ml-vectorize) :blocks core/parse-page))))
+       (mapcat (comp (partial map #(merge (select-keys % [:x0 :x1 :y0 :y1 :page-number])
+                                          (nf/ml-vectorize %)))
+                     :blocks core/parse-page))))
 
 (defn block-truth-data [raw-pdf-url oracle-pdf-url]
   (->> (blocks-as-feature-vectors raw-pdf-url)
@@ -111,14 +113,39 @@
        (group-by :id)
        (map (comp (partial apply merge) second))))
 
+
+
+;random forests ....
+;TODO assign to multiple categories
+(defn blocks-as-classified-features [pdf-url]
+  (->> pdf-url
+       core/build-pages
+       (mapcat (comp (partial map #(merge (select-keys % [:x0 :x1 :y0 :y1 :page-number :class])
+                                          {:filename (last (s/split pdf-url #"/"))}
+                                          (nf/rand-forest-features %)))
+                     :blocks core/parse-page))))
+
+
+
+
+
+
+
+
+
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;    Repl snippets
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (comment
 
+  ;block-oracle-2
+  (spit "/home/ARBFUND/tlong/blocks.edn" (pr-str (concat (map blocks-as-classified-features (u/get-pdfs-in-dir (str u/home-dir "/Documents/pdf_parsing/control_2/blocks"))))))
+
+
   ;build oracle data set
-  ;dump this in mongo
   (let [base-dir (str u/home-dir "/Documents/pdf_parsing/control_2/")
         oracle-pdfs (u/get-pdfs-in-dir (str base-dir "oracle_9_17_2018"))
         raw-pdfs (u/get-pdfs-in-dir (str base-dir "raw"))]
@@ -180,10 +207,6 @@
   (->> (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/13034AFJ4.pdf")
        core/build-pages
        (mapcat (comp :blocks core/parse-page))
-       (map (comp #(update % :feature-vec frequencies) nf/ml-vectorize))
+       #_(map (comp #(update % :feature-vec frequencies) nf/ml-vectorize))
 
-       )
-
-
-
-  )
+       ))
