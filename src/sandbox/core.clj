@@ -142,7 +142,7 @@
 (comment
 
   ;block-oracle-2
-  (spit "/home/ARBFUND/tlong/blocks.edn" (pr-str (concat (map blocks-as-classified-features (u/get-pdfs-in-dir (str u/home-dir "/Documents/pdf_parsing/control_2/blocks"))))))
+  (spit (str u/home-dir "/blocks.edn") (pr-str (concat (map blocks-as-classified-features (u/get-pdfs-in-dir (str u/home-dir "/Documents/pdf_parsing/control_2/blocks"))))))
 
 
   ;build oracle data set
