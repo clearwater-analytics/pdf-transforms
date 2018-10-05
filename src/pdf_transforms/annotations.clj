@@ -66,10 +66,12 @@
 (defn box->annotation [{:keys [x0 x1 y0 y1 class type]}]
   (let [position (doto (PDRectangle.)
                    (.setLowerLeftX x0) (.setLowerLeftY y0)
-                   (.setUpperRightX x1) (.setUpperRightY y1))]
+                   (.setUpperRightX x1) (.setUpperRightY y1))
+        color (or (obj->color type class) (pd-color :black))]
     (doto
       (PDAnnotationSquareCircle. PDAnnotationSquareCircle/SUB_TYPE_SQUARE)
-      (.setColor (or (obj->color type class) (pd-color :black)))
+      (.setColor color)
+      ;(.setInteriorColor color)
       (.setTitlePopup (str "Class: " (or type class)))
       (.setBorderStyle THICK-BORDER)
       (.setRectangle position))))
