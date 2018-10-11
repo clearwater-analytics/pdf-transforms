@@ -50,14 +50,14 @@
 (defn build-cells [words]
   (reduce (fn [stream {c-x :x c-text :text ss? :superscript? :as curr-datum}]
             (if-let [last-datum (peek stream)]
-              (let [{:keys [x width text font-size]} last-datum
+              (let [{:keys [x width text f-size]} last-datum
                     x1 (+ x width)
                     gap-width (- c-x x1)]
                 (cond
                   (or (re-matches #"\s*[$]\s*" text)        ;should be same cell
                       (re-matches #"[.]{2,}|[%]" c-text)
                       ss?
-                      (<= gap-width (* 0.417 (min 12 font-size))))
+                      (<= gap-width (* 0.417 (min 12 f-size))))
                   (conj (pop stream) (conj-words last-datum curr-datum))
                   :default (conj stream curr-datum)))
               (conj stream curr-datum)))
@@ -74,10 +74,10 @@
 (defn join-headers-on-line [words]
   (reduce (fn [stream {c-x :x ss? :superscript? :as curr-datum}]
             (if-let [last-data (peek stream)]
-              (let [{:keys [x width font-size]} (peek last-data)
+              (let [{:keys [x width f-size]} (peek last-data)
                     x1 (+ x width)
                     gap-width (- c-x x1)]
-                (if (or ss? (<= gap-width (* 0.417 (min 12 font-size))))
+                (if (or ss? (<= gap-width (* 0.417 (min 12 f-size))))
                   (conj (pop stream) (conj last-data curr-datum))
                   (conj stream [curr-datum])))
               (conj stream [curr-datum])))
@@ -91,14 +91,14 @@
                     (if-let [curr-cell (first remaining)]
                       (let [same-cell? #(or (= #{} (cmn/relative-to curr-cell %))
                                             (= #{:below} (cmn/relative-to curr-cell %)))]
-                        (recur (remove same-cell? (rest remaining)) (conj combined (mapcat :tokens (filter same-cell? remaining)))))
+                        (recur (remove same-cell? (rest remaining)) (conj combined (mapcat :content (filter same-cell? remaining)))))
                       combined))]
-    (map #(merge {:tokens (concat (mapcat :tokens polys) %)} (cmn/boundaries-of %)) new-cells)))
+    (map #(merge {:content (concat (mapcat :content polys) %)} (cmn/boundaries-of %)) new-cells)))
 
 
 (defn adjust-multicol [header-lines]
   (let [cells (map (fn [cell]
-                     (merge {:tokens cell} (cmn/boundaries-of cell)))
+                     (merge {:content cell} (cmn/boundaries-of cell)))
                    (mapcat join-headers-on-line header-lines))
         combined-cells (loop [remaining (sort-by :y0 cells)
                               combined []]
@@ -111,8 +111,8 @@
          (map (comp
                 #(if (> (count %) 1)
                   (distribute-multicol (flatten %))
-                  (let [tokens (mapcat :tokens (first %))]
-                    (merge {:tokens tokens} (cmn/boundaries-of tokens))))
+                  (let [content (mapcat :content (first %))]
+                    (merge {:content content} (cmn/boundaries-of content))))
                 (partial utils/partition-when #(< (- (:y0 %2) (:y0 %1)) 4))
                 (partial sort-by :y0)))
          flatten)))
@@ -152,7 +152,7 @@
          (mapv #(row-to-vec bounds %))
          (#(update % 0 (comp
                          (partial map (fn [x] (if (nil? x) [utils/dummy-token] x)))
-                         (partial mapcat (partial map :tokens))))))))
+                         (partial mapcat (partial map :content))))))))
 
 (defn parse-table [lines]
   (-> lines

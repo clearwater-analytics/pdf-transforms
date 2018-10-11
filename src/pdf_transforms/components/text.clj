@@ -22,17 +22,17 @@
                  (rest token-stream)))))
 
 
-(defn ->text [{:keys [tokens] :as blk}]
+(defn ->text [{:keys [content] :as blk}]
   (merge {:type :text
-          :vals (create-text-lines tokens)}
-         (dissoc blk :tokens :features :type)))
+          :vals (create-text-lines content)}
+         (dissoc blk :content :features :type)))
 
 (def label-line #"(?:[a-zA-Z]+\s){0,5}[a-zA-Z]+\s*(?:[-+:]|[.]{2,})\s*")
 
 (defn delimited-line? [words]
   (->> words (map :text) (s/join " ") (re-matches label-line)))
 
-(defn key-column? [{words :tokens :as block}]
+(defn key-column? [{words :content :as block}]
   (let [lines (utils/create-lines words)]
     (or
       (>= (/ (count (filter delimited-line? lines))
@@ -47,10 +47,10 @@
         neighbors (if nearest (->> blocks
                                    cmn/sort-blocks
                                    (drop-while #(not (:below (cmn/relative-to nearest %))))
-                                   (take-while (fn [{tx0 :x0 words :tokens}]
+                                   (take-while (fn [{tx0 :x0 words :content}]
                                                  (and (neg? (- x0 tx0 5)) ; horizontal indentation is at least as great as nearest's
-                                                      (>= (-> nearest :tokens first :font-size)
-                                                         (-> words first :font-size)))))))]
+                                                      (>= (-> nearest :content first :f-size)
+                                                         (-> words first :f-size)))))))]
     (if (and nearest (< (- x0 kc-x1) 150)) (concat on-right neighbors))))
 
 (defn label-vals-bounds [blocks keys-column]
@@ -70,9 +70,9 @@
                    (conj boxes box))) [])
        (reduce (fn [components box]
                  (conj components (-> box
-                                      (dissoc :features :tokens)
+                                      (dissoc :features :content)
                                       (assoc :type :text
                                              :vals (->> blocks
                                                         (filter (partial cmn/within? box))
-                                                        (mapcat :tokens)
+                                                        (mapcat :content)
                                                         utils/create-lines))))) [])))
