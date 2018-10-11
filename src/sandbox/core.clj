@@ -135,13 +135,14 @@
 
 (comment
 
-  (let [pdf (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/54811A4J9.pdf")
+  (let [pdf (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/edgar.pdf")
           chunk-dimension 5]
       (->> pdf
            core/build-pages
            (mapcat (comp (partial is/segments->chunks chunk-dimension) :segments core/parse-page))
            (a/annotate {:pdf-url pdf :output-directory u/annotated-dir})
-           dorun))
+           dorun
+           ))
 
 
   ;block-oracle-2
@@ -161,6 +162,7 @@
 
 
   (annotate-batch "control_2" :segments)
+  (annotate-batch "control_2" :bit-masked-segments)
   (annotate-batch "control_2" :blocks)
   (annotate-batch "control_2" :components)
 
@@ -207,15 +209,13 @@
 
 
   (a/annotate {:pdf-url (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/54811A4J9.pdf") :output-directory u/annotated-dir}
-              (let [step 5]
-                (for [x (range 0 600 step)
-                      y (range 0 600 step)]
-                  {:page-number 1 :x0 x :x1 (+ x step) :y0 y :y1 (+ y step)}
-                  ))
-              )
+              (let [step (int (/ 800 3))]
+                (for [x (range 0 800 step)
+                      y (range 0 800 step)]
+                  {:page-number 1 :x0 x :x1 (+ x step) :y0 y :y1 (+ y step)})))
 
 
-  (->> (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/transposed_table.pdf")
+  (->> (str "file:" u/home-dir "/Documents/pdf_parsing/control_2/raw/54811A4J9.pdf")
        core/build-pages
        (map #(dissoc % :text-positions))
        #_(mapcat (comp :blocks core/parse-page))

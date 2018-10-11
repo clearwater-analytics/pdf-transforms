@@ -13,7 +13,8 @@
             [plumbing.graph :as graph]
             [pdf-transforms.blocks.classify :as cl]
             [pdf-transforms.components.columnar :as col]
-            [pdf-transforms.tokens.graphics :as g])
+            [pdf-transforms.tokens.graphics :as g]
+            [sandbox.image-seg :as is])
   (:import (org.apache.pdfbox.text PDFTextStripper)))
 
 (def pdf->text
@@ -35,17 +36,18 @@
 
 
 (def page-parser
-  {:tokens          (fnk [text-positions] (pd/page->token-stream text-positions))
-   :visual-features (fnk [tokens] (->> tokens utils/create-lines
-                                       (col/intertext-boundaries 4)
-                                       (map #(assoc % :class :visual-feature :boundary-axis :x))))
-   :segments        (fnk [tokens {graphics []} visual-features] (bs/compose-segments tokens (concat visual-features graphics)))
-   :blocks          (fnk [segments {graphics []} x0 x1 y0 y1]
-                      (->> (bc/compose-blocks segments graphics)
-                           (f/ml-enfeature {:x0 x0 :x1 x1 :y0 y0 :y1 y1})
-                           (map cl/add-ml-class)))
-   :components      (fnk [tokens blocks]
-                      (cmps/->components tokens blocks))})
+  {:tokens              (fnk [text-positions] (pd/page->token-stream text-positions))
+   :visual-features     (fnk [tokens] (->> tokens utils/create-lines
+                                           (col/intertext-boundaries 4)
+                                           (map #(assoc % :class :visual-feature :boundary-axis :x))))
+   :segments            (fnk [tokens {graphics []} visual-features] (bs/compose-segments tokens (concat visual-features graphics)))
+   :blocks              (fnk [segments {graphics []} x0 x1 y0 y1]
+                          (->> (bc/compose-blocks segments graphics)
+                               (f/ml-enfeature {:x0 x0 :x1 x1 :y0 y0 :y1 y1})
+                               (map cl/add-ml-class)))
+   :bit-masked-segments (fnk [segments] (is/segments->chunks 5 segments))
+   :components          (fnk [tokens blocks]
+                          (cmps/->components tokens blocks))})
 
 (def parse-page (graph/lazy-compile page-parser))
 
@@ -92,7 +94,7 @@
    Supported formats include tokens, segments, blocks, plain-text, pages-of-lines, and components (default)."
   [pdf-path & [{:keys [page-bounds format] :as opts}]]
   (case (keyword format)
-    :plain-text  (pdf->text pdf-path page-bounds)
+    :plain-text (pdf->text pdf-path page-bounds)
     :pages-of-lines (pdf->pages-of-lines pdf-path page-bounds)
     (->> pdf-path
          (build-pages page-bounds)
@@ -107,7 +109,7 @@
    [(first page-bounds) , (last page-bounds)) will be annotated."
   [^String pdf-url & [{:keys [output-directory page-bounds]}]]
   (->> (transform pdf-url {:page-bounds page-bounds :format :components})
-       (ann/annotate {:pdf-url pdf-url :output-directory output-directory
+       (ann/annotate {:pdf-url        pdf-url :output-directory output-directory
                       :table-columns? true :superscripts? true})
        dorun))
 

@@ -1,24 +1,27 @@
 (ns sandbox.image-seg)
 
-;TODO maybe try this with
-
-(defn round
-  "Rounds n to the nearest multiple of mult-of"
-  [n mult-of]
+(defn round-out
+  "Rounds n to the nearest multiple of mult-of in an inclusive manner.
+  That is, if up? then the function will round up to cover the block."
+  [n mult-of dir]
   (let [div (/ n mult-of)
-        low-end (* (Math/floor div) mult-of)]
-    (if (< (- n low-end) (/ mult-of 2.0))
-      low-end
-      (* (Math/ceil div) mult-of))))
+        up? (= dir :up)
+        low-end (* (Math/floor div) mult-of)
+        high-end (* (Math/ceil div) mult-of)]
+    (if up?
+      (if (> (- n low-end) (/ mult-of 2.0))                 ;the data overlaps the block by some minimal amount
+        high-end
+        low-end)
+      (if (> (- high-end n) (/ mult-of 2.0))                 ;the data overlaps the block by some minimal amount
+        low-end
+        high-end))))
 
 
-;;;;
 (defn segment->chunks [step {:keys [x0 x1 y0 y1]}]
-  (for [x (range (round x0 step) (round x1 step) step)
-        y (range (round y0 step) (round y1 step) step)]
+  (for [x (range (round-out x0 step :down) (round-out x1 step :up) step)
+        y (range (round-out y0 step :down) (round-out y1 step :up) step)]
     {:x0 x :x1 (+ x step) :y0 y :y1 (+ y step)
      :id (str (int x) "-" (int y))}))
-
 
 
 ;if a block is taken up by text, add it
