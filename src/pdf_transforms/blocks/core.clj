@@ -1,89 +1,119 @@
 (ns pdf-transforms.blocks.core
   "Functions for grouping words into semantic chunks, where whitespace and
   font changes are used to infer boundaries."
-  (:require [pdf-transforms.utilities :as utils]
-            [pdf-transforms.common :as cmn]
-            [clojure.set :as s]))
+  (:require [clojure.string :as s]
+            [pdf-transforms.utilities :as utils]
+            [pdf-transforms.common :as cmn]))
 
-(defn vertically-near? [{:keys [y1 height]}
-                        {by0 :y0 b-height :height}]
-  (< (- by0 y1) (* 0.75 (min height b-height))))
+(def font-noise #"[A-Z]+[+]|[Ii][Tt][Aa][Ll][iI][cC][sS]?|[=,-.]")
 
-(defn weird-change? [{page-x0 :x0 page-x1 :x1} {:keys [tokens x0] :as seg1} {bx0 :x0 b-tokens :tokens :as seg2}]
+(defn font-clean [font]
+  (s/replace font font-noise ""))
+
+(defn font-switch? [block {:keys [font f-size]}]
+  (let [{font2 :font f-size2 :f-size} (peek block)]
+    (or (not= (font-clean font) (font-clean font2))
+        (not= f-size f-size2))))
+
+(defn font-switch-newline? [block {y1 :y :as word}]
+  (let [{y0 :y height :height ss? :superscript?} (peek block)]
+    (and (font-switch? block word)
+         (not ss?)
+         (> (- y1 y0) height))))
+
+(defn avg-line-diff [words]
+  (let [{:keys [cnt sum]}
+        (->> words
+             (remove :superscript?)
+             (sort-by :y)
+             (reduce (fn [{:keys [sum cnt y0]} {y1 :y h1 :height}]
+                       (let [sig-diff? (> (- y1 y0) h1)]
+                         {:y0  y1
+                          :sum (+ sum (if sig-diff? (- y1 y0) 0))
+                          :cnt (+ cnt (if sig-diff? 1 0))}))
+                     {:sum 0 :cnt 0 :y0 1000}))]
+    (/ sum (max 1 cnt))))
+
+(defn y-gap? [block {:keys [font height y]}]
+  (let [{y0 :y height0 :height font2 :font ss? :superscript?} (peek block)
+        avg-block-diff (avg-line-diff block)]
+    (if (pos? avg-block-diff)
+      (> (- y y0 (if ss? height0 0)) (* 1.25 avg-block-diff))
+      (> (- y height)
+         (+ y0 (* (cond ss? 4.0
+                        (= (font-clean font) (font-clean font2)) 2.0
+                        :else 1.5)
+                  (min height0 height)))))))
+
+(defn last-in-segment [stream]
+  (reduce (fn [{:keys [x y] :as prev} {x1 :x y1 :y :as word}]
+            (if (or
+                  (utils/gap? prev word)
+                  (< x1 x)
+                  (> (- y1 y) 3))
+              (reduced prev)
+              word))
+          (first stream) (rest stream)))
+
+(defn x-gap? [block stream]
   (or
-    (and (cmn/centered? page-x0 page-x1 seg1) (not (cmn/centered? page-x0 page-x1 seg2)) (not (utils/within-x? 20 x0 bx0)))
-    (not (and (seq (s/intersection (set (map :font tokens)) (set (map :font b-tokens))))
-              (seq (s/intersection (set (map :font-size tokens)) (set (map :font-size b-tokens))))))))
+    (utils/gap? (peek block) (first stream))
+    (utils/gap? (last-in-segment stream) (first block))))
+
+(def tokens->basic-blocks
+  (partial cmn/compose-groups
+           {:terminates? (fn [block stream]
+                           (and (or
+                                  (:horizontal-bar? (first stream))
+                                  (re-matches utils/dash-line (:text (first stream)))
+                                  (y-gap? block (first stream)))
+                                (not (x-gap? block stream))))
+            :irrelevant? (fn [block stream]
+                           (or (font-switch-newline? block (first stream))
+                               (x-gap? block stream)))
+            :add-to      (fn [block word] (conj (or block []) word))}))
+
+(defn adjust [{:keys [content] :as block0} [{x0 :x0} :as blocks]]
+  (let [lines (utils/create-lines content)
+        [title & columns] (utils/partition-when (fn [line1 line2]
+                                                  (let [{x-l1 :x w-l1 :width} (last line1)
+                                                        {x-l2 :x w-l2 :width} (last line2)]
+                                                    (and
+                                                      (> (+ x-l1 w-l1) (- x0 8))
+                                                      (< (+ x-l2 w-l2) (- x0 8))))) lines)
+        title-content (flatten title)
+        column-content (flatten (drop (count title) lines))
+        merge-blocks (fn [{:keys [content] :as blk}
+                          {cntnt :content :as blk2}]
+                       (assoc (utils/expand-bounds blk blk2) :content (apply conj content cntnt)))]
+    (if (and (not-empty title) (not-empty columns)
+             (every? (fn [{:keys [x width]}] (< (+ x width) x0)) column-content))
+      (concat blocks
+              [(assoc (cmn/boundaries-of title-content) :content title-content)
+               (assoc (cmn/boundaries-of column-content) :content column-content)])
+      [(reduce merge-blocks block0 blocks)])))
 
 
-(defn y-boundary-between? [graphics {ay1 :y1 ax0 :x0 ax1 :x1 toks :tokens} {by0 :y0}]
-  (some
-    (fn [{:keys [x0 x1 y0 y1 boundary-axis]}]
-      (and (= :y boundary-axis)                   ;boundary separates along the y axis
-           (>= (inc y0) ay1)                      ;boundary is below top segment
-           (>= (inc by0) y1)                      ;boundary is above bottom segment
-           (>= (- (min ax1 x1) (max ax0 x0)) 4.0) ;sufficient overlap in horizontal direction
-           (> (/ (- x1 x0) (- ax1 ax0)) 0.5)))      ;boundary is large relative to the segment (so as to ignore underlined words in sentences)
-    graphics))
+(defn adjust-overlapping [blocks]
+  (loop [blks (cmn/sort-blocks blocks)
+         result []]
+    (if-let [blk (first blks)]
+      (let [{overlap true independent false}
+            (group-by (partial cmn/overlaps? blk) (rest blks))]
+        (recur independent
+               (apply conj result (if (empty? overlap) [blk]
+                                                       (do #_(println "overlap"
+                                                                      (map :text (:content blk))
+                                                                      (map (comp (partial map :text) :content) overlap))
+                                                         (adjust blk overlap))))))
+      result)))
 
-(defn filter-candidates [segment other-segments page-dimensions graphics blocks]
-  (:candidates
-    (reduce (fn [{:keys [candidates] :as box} seg]
-              (if (and (= #{:below} (cmn/forgiving-relative-to box seg))
-                       (vertically-near? (last candidates) seg)
-                       (not (weird-change? page-dimensions (last candidates) seg))
-                       (not (y-boundary-between? graphics (last candidates) seg)))
-
-                ;now check if adding this segment would lead to merge side-by-side segments
-                (let [{cands :candidates :as hypothesis} (-> box (utils/expand-bounds seg) (update :candidates conj seg))]
-                  (if (some (fn [seg-x] (and (empty? (cmn/forgiving-relative-to hypothesis seg-x)) ;within block
-                                             (not (some (partial = seg-x) cands)))) ;but not a candidate
-                            (concat other-segments blocks))
-                    (reduced box)
-                    hypothesis))
-                box))
-            (assoc segment :candidates [segment])
-            other-segments)))
-
-
-(defn group-vertically [segment other-segments other-blocks graphics page-dimensions]
-  (let [calc-diff #(- (:y0 (second %)) (:y1 (first %)))
-        pairs (->> other-blocks
-                   (filter-candidates segment other-segments page-dimensions graphics)
-                   (partition 2 1))]
-    (case (count pairs)
-      0 [segment]
-      1 (first pairs)
-      (:block (reduce (fn [{:keys [last-diff block]} pair]  ;group by magnitude of separation
-                        (let [diff (calc-diff pair)]
-                          (cond
-                            (< diff 0.5)                  ;deal with division by 0
-                            {:last-diff diff :block (conj block (second pair))}
-                            (< (Math/abs (- 1.0 (/ last-diff diff))) 0.5)
-                            {:last-diff diff :block (conj block (second pair))}
-                            (> diff last-diff)
-                            (reduced {:block block})
-                            :else (reduced {:block (butlast block)}))))
-                      {:last-diff (calc-diff (first pairs))
-                       :block     (into [] (first pairs))}
-                      (rest pairs))))))
-
-
-(def format-block
-  (comp
-    #(select-keys % [:x0 :x1 :y0 :y1 :page-number :tokens])
-    (partial reduce (fn [res {:keys [tokens] :as seg}]
-                      (-> res
-                          (utils/expand-bounds seg)
-                          (update :tokens #(concat % tokens)))))))
-
-
-(defn compose-blocks [segments graphics]
-  (let [page-dimensions {:x0 (apply min (map :x0 segments))
-                         :x1 (apply max (map :x1 segments))}]
-    (loop [blocks []
-           remaining segments]
-      (if-not (seq remaining)
-        blocks
-        (let [block (group-vertically (first remaining) (rest remaining) blocks graphics page-dimensions)]
-          (recur (conj blocks (format-block block)) (remove (into #{} block) remaining)))))))
+(defn blocks-on-page [page]
+  (->> page
+       tokens->basic-blocks
+       (keep (comp
+               not-empty
+               (partial remove :horizontal-bar?)))
+       (map #(assoc (cmn/boundaries-of %) :content %))
+       adjust-overlapping
+       cmn/sort-blocks))
